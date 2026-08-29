@@ -1,0 +1,40 @@
+import { Clock3, FolderPlus, GitCompareArrows, Heart, Inbox, ListEnd, MoreHorizontal, Play, Plus, UserRound, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import type { VideoRef } from '../domain/types'
+import { formatDuration } from '../lib/time'
+import { useApp } from '../store/AppStore'
+
+export function VideoCard({ video, compact = false }: { video: VideoRef; compact?: boolean }) {
+  const app = useApp()
+  const navigate = useNavigate()
+  const [menu, setMenu] = useState(false)
+  const timer = useRef<number>(undefined)
+  const open = () => { app.playVideo(video); navigate(`/watch?v=${video.videoId}`) }
+  const onPointerDown = () => { timer.current = window.setTimeout(() => setMenu(true), 480) }
+  const clear = () => window.clearTimeout(timer.current)
+  const action = (handler: () => void) => { handler(); setMenu(false) }
+  return <article className={`video-card ${compact ? 'video-card-compact' : ''}`} onPointerDown={onPointerDown} onPointerUp={clear} onPointerCancel={clear}>
+    <button className="thumbnail-button" onClick={open} aria-label={`${video.title}を再生`}>
+      <img src={video.thumbnail ?? `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`} alt="" loading="lazy" />
+      <span className="duration-badge">{video.liveStatus === 'live' ? 'LIVE' : formatDuration(video.durationSeconds)}</span>
+      <span className="play-reveal"><Play fill="currentColor" /></span>
+    </button>
+    <div className="video-card-body">
+      <button className="title-button" onClick={open}>{video.title}</button>
+      <div className="video-meta"><span>{video.channelTitle ?? 'Channel information pending'}</span>{video.viewCount !== undefined && <span>{Intl.NumberFormat('ja', { notation: 'compact' }).format(video.viewCount)}回</span>}</div>
+    </div>
+    <button className="icon-button card-menu" aria-label="管理メニュー" onClick={() => setMenu(true)}><MoreHorizontal /></button>
+    {menu && <div className="card-action-menu" role="menu">
+      <button onClick={() => action(() => app.addQueue(video, true))}><ListEnd />次に再生</button>
+      <button onClick={() => action(() => app.addQueue(video))}><Plus />Queueへ追加</button>
+      <button onClick={() => action(() => app.toggleWatchLater(video))}><Clock3 />後で見る</button>
+      <button onClick={() => action(() => app.toggleFavorite(video))}><Heart />お気に入り</button>
+      {app.feature('watchInbox') && <button onClick={() => action(() => app.toggleInbox(video))}><Inbox />Inbox</button>}
+      <button onClick={() => { setMenu(false); navigate(`/library?organize=${video.videoId}`) }}><FolderPlus />Folder / Tags</button>
+      {video.channelId && <button onClick={() => { setMenu(false); navigate(`/channel/${video.channelId}`) }}><UserRound />Channelを開く</button>}
+      {app.feature('compare') && <button onClick={() => { setMenu(false); navigate(`/compare?a=${video.videoId}`) }}><GitCompareArrows />比較に追加</button>}
+      <button onClick={() => setMenu(false)}><X />閉じる</button>
+    </div>}
+  </article>
+}
