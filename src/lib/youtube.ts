@@ -1,5 +1,6 @@
 import type { SearchFilters, SearchResult, VideoRef } from '../domain/types'
 import { cacheGet, cachePut } from '../data/db'
+import { recordDiagnostic } from './diagnostics'
 
 const API = 'https://www.googleapis.com/youtube/v3'
 const SEARCH_TTL = 6 * 60 * 60 * 1000
@@ -57,6 +58,7 @@ async function apiFetch<T>(path: string, params: Record<string, string>, signal?
     }
     if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt + Math.random() * 180))
   }
+  recordDiagnostic('api', `YouTube ${path} request failed after retries`)
   throw lastError ?? new Error('YouTube request failed')
 }
 

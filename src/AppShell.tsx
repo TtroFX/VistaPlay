@@ -1,10 +1,11 @@
-import { Suspense, useEffect } from 'react'
+import { Suspense, useCallback, useEffect } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LoadingCards } from './components/EmptyState'
 import { Sidebar } from './components/Sidebar'
 import { ToastViewport } from './components/ToastViewport'
 import { TopBar } from './components/TopBar'
 import { parseYouTubeInput } from './lib/youtube'
+import { useEdgeSwipeBack } from './lib/useEdgeSwipeBack'
 import { PersistentPlayer } from './player/PersistentPlayer'
 import { playerEngine } from './player/PlayerEngine'
 import { useApp } from './store/AppStore'
@@ -13,6 +14,8 @@ export function AppShell() {
   const app = useApp()
   const location = useLocation()
   const navigate = useNavigate()
+  const swipeBack = useCallback(() => navigate(-1), [navigate])
+  const swipeRef = useEdgeSwipeBack(swipeBack)
 
   useEffect(() => {
     const mode = app.state.settings.theme.mode
@@ -55,11 +58,11 @@ export function AppShell() {
   }, [app.player.availableRates, app.player.rate])
 
   const fullPlayer = location.pathname === '/watch'
-  return <div className={`app-shell sidebar-${app.state.settings.layout.sidebarMode} ${app.currentVideo && !fullPlayer ? 'has-mini-player' : ''}`}>
+  return <div className={`app-shell sidebar-${app.state.settings.layout.sidebarMode} cards-${app.state.settings.layout.cardSize} ${app.currentVideo && !fullPlayer ? 'has-mini-player' : ''}`}>
     <Sidebar />
     <div className="app-column">
       {!app.state.settings.layout.focusMode && <TopBar />}
-      <main className={`main-content ${fullPlayer ? 'watch-stage' : ''}`}>
+      <main ref={swipeRef} className={`main-content ${fullPlayer ? 'watch-stage' : ''}`}>
         <PersistentPlayer />
         <Suspense fallback={<LoadingCards />}><Outlet /></Suspense>
       </main>

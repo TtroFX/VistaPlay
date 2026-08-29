@@ -1,3 +1,4 @@
+import { recordDiagnostic } from '../lib/diagnostics'
 import { resolvePlaybackRate } from '../lib/playerMath'
 
 type YTPlayerState = -1 | 0 | 1 | 2 | 3 | 5
@@ -94,11 +95,12 @@ class PlayerEngine extends EventTarget {
           onReady: () => this.handleReady(),
           onStateChange: (event: { data: YTPlayerState }) => this.handleState(event.data),
           onPlaybackRateChange: () => this.poll(),
-          onError: (event: { data: number }) => this.emit({ state: 'error', error: `YouTube Player error ${event.data}` })
+          onError: (event: { data: number }) => { recordDiagnostic('player', `YouTube Player error ${event.data}`); this.emit({ state: 'error', error: `YouTube Player error ${event.data}` }) }
         }
       })
       this.startPolling()
     } catch (error) {
+      recordDiagnostic('player', 'Embedded Player initialization failed')
       this.emit({ state: 'error', error: error instanceof Error ? error.message : 'Player unavailable' })
     }
   }

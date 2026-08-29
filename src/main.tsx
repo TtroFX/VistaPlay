@@ -5,6 +5,7 @@ import { AppShell } from './AppShell'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { UpdatePrompt } from './components/UpdatePrompt'
 import type { FeatureKey } from './domain/types'
+import { installRuntimeDiagnostics } from './lib/diagnostics'
 import { AppProvider, useApp } from './store/AppStore'
 import './styles.css'
 
@@ -24,6 +25,8 @@ const AIPage = lazy(() => import('./pages/AIPage'))
 const StatisticsPage = lazy(() => import('./pages/StatisticsPage'))
 const DiscoverPage = lazy(() => import('./pages/DiscoverPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
+
+installRuntimeDiagnostics()
 
 function FeatureGuard({ feature, children }: { feature: FeatureKey; children: ReactNode }) {
   const app = useApp()

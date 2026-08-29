@@ -3,6 +3,7 @@ import { createDefaultState, isFeatureRuntimeEnabled } from '../config/features'
 import { loadAppState, saveAppState, saveWatchSession } from '../data/repository'
 import type { FeatureKey, PersistedAppState, QueueItem, SavedQueue, ToastMessage, VideoRef, WatchProgress, WatchSession } from '../domain/types'
 import { isCompleted } from '../lib/playerMath'
+import { recordDiagnostic } from '../lib/diagnostics'
 import { playerEngine, type PlayerSnapshot } from '../player/PlayerEngine'
 import { stampSyncMetadata } from '../sync/conflicts'
 
@@ -65,7 +66,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       setState(loaded)
       if (loaded.lastPlayer?.videoId && loaded.videos[loaded.lastPlayer.videoId]) setCurrentVideo(loaded.videos[loaded.lastPlayer.videoId])
       setHydrated(true)
-    }).catch(() => setHydrated(true))
+    }).catch(() => { recordDiagnostic('migration', 'Local database restore or migration failed'); setHydrated(true) })
   }, [])
 
   useEffect(() => {
