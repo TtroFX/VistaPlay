@@ -1,7 +1,7 @@
 import { Archive, Bot, Captions, ChevronDown, ChevronRight, Clock3, FileText, GitCompareArrows, Heart, Inbox, ListVideo, MessageCircle, NotebookPen, Plus, SkipForward, Sparkles, Tags, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { fetchComments, extractChapters, extractTimestamps, verifyVideoIds } from '../lib/youtube'
+import { fetchComments, extractChapters, extractTimestamps, verifyVideoIds, type YouTubeCommentsResponse } from '../lib/youtube'
 import { fetchSponsorSegments, type SponsorSegment } from '../lib/sponsorBlock'
 import { formatDuration } from '../lib/time'
 import { playerEngine } from '../player/PlayerEngine'
@@ -10,10 +10,10 @@ import { useApp } from '../store/AppStore'
 type WatchTab = 'queue' | 'chapters' | 'comments' | 'captions' | 'livechat' | 'overview'
 interface CommentView { id: string; author: string; text: string; likes: number; replies: CommentView[] }
 
-function mapComments(data: any): CommentView[] {
-  return (data.items ?? []).map((item: any) => {
+function mapComments(data: YouTubeCommentsResponse): CommentView[] {
+  return (data.items ?? []).map((item) => {
     const top = item.snippet?.topLevelComment
-    return { id: top?.id ?? item.id, author: top?.snippet?.authorDisplayName ?? 'Unknown', text: top?.snippet?.textDisplay ?? '', likes: top?.snippet?.likeCount ?? 0, replies: (item.replies?.comments ?? []).map((reply: any) => ({ id: reply.id, author: reply.snippet?.authorDisplayName ?? 'Unknown', text: reply.snippet?.textDisplay ?? '', likes: reply.snippet?.likeCount ?? 0, replies: [] })) }
+    return { id: top?.id ?? item.id ?? crypto.randomUUID(), author: top?.snippet?.authorDisplayName ?? 'Unknown', text: top?.snippet?.textDisplay ?? '', likes: top?.snippet?.likeCount ?? 0, replies: (item.replies?.comments ?? []).map((reply) => ({ id: reply.id ?? crypto.randomUUID(), author: reply.snippet?.authorDisplayName ?? 'Unknown', text: reply.snippet?.textDisplay ?? '', likes: reply.snippet?.likeCount ?? 0, replies: [] })) }
   })
 }
 

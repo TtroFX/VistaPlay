@@ -3,6 +3,9 @@ import { cacheGet, cachePut } from '../data/db'
 
 const API = 'https://www.googleapis.com/youtube/v3'
 const SEARCH_TTL = 6 * 60 * 60 * 1000
+const METADATA_TTL = 24 * 60 * 60 * 1000
+const LIVE_METADATA_TTL = 60 * 1000
+const COMMENTS_TTL = 10 * 60 * 1000
 
 export class CapabilityError extends Error {
   constructor(public readonly capability: string, message: string) { super(message) }
@@ -80,8 +83,17 @@ function mapVideo(item: VideoApiItem): VideoRef {
 export async function verifyVideoIds(ids: string[], signal?: AbortSignal): Promise<{ valid: VideoRef[]; invalid: string[] }> {
   const unique = [...new Set(ids)].slice(0, 50)
   if (!unique.length) return { valid: [], invalid: [] }
-  const data = await apiFetch<{ items?: VideoApiItem[] }>('videos', { part: 'snippet,contentDetails,statistics,liveStreamingDetails', id: unique.join(',') }, signal)
-  const valid = (data.items ?? []).map(mapVideo)
+  const cached = await Promise.all(unique.map(async (id) => (await cacheGet<VideoRef>(`video:${id}`))?.value))
+  const metadata = new Map(cached.filter(Boolean).map((video) => [video!.videoId, video!]))
+  const missing = unique.filter((id) => !metadata.has(id))
+  if (missing.length) {
+    const data = await apiFetch<{ items?: VideoApiItem[] }>('videos', { part: 'snippet,contentDetails,statistics,liveStreamingDetails', id: missing.join(',') }, signal)
+    for (const item of (data.items ?? []).map(mapVideo)) {
+      metadata.set(item.videoId, item)
+      await cachePut(`video:${item.videoId}`, item, item.liveStatus === 'live' || item.liveStatus === 'upcoming' ? LIVE_METADATA_TTL : METADATA_TTL)
+    }
+  }
+  const valid = unique.map((id) => metadata.get(id)).filter(Boolean) as VideoRef[]
   const found = new Set(valid.map((item) => item.videoId))
   return { valid, invalid: unique.filter((id) => !found.has(id)) }
 }
@@ -152,19 +164,41 @@ export function extractTimestamps(text: string, duration?: number): number[] {
   return [...new Set(values)]
 }
 
-export async function fetchComments(videoId: string, pageToken?: string, order: 'relevance' | 'time' = 'relevance', signal?: AbortSignal) {
+export interface YouTubeComment {
+  id?: string
+  snippet?: { authorDisplayName?: string; textDisplay?: string; likeCount?: number }
+}
+
+export interface YouTubeCommentThread {
+  id?: string
+  snippet?: { topLevelComment?: YouTubeComment }
+  replies?: { comments?: YouTubeComment[] }
+}
+
+export interface YouTubeCommentsResponse { items?: YouTubeCommentThread[]; nextPageToken?: string }
+
+export async function fetchComments(videoId: string, pageToken?: string, order: 'relevance' | 'time' = 'relevance', signal?: AbortSignal): Promise<YouTubeCommentsResponse> {
+  const cacheKey = `comments:${videoId}:${order}:${pageToken ?? 'first'}`
+  const cached = await cacheGet<YouTubeCommentsResponse>(cacheKey)
+  if (cached) return cached.value
   const params: Record<string, string> = { part: 'snippet,replies', videoId, maxResults: '20', order, textFormat: 'plainText' }
   if (pageToken) params.pageToken = pageToken
-  return apiFetch<any>('commentThreads', params, signal)
+  const value = await apiFetch<YouTubeCommentsResponse>('commentThreads', params, signal)
+  await cachePut(cacheKey, value, COMMENTS_TTL)
+  return value
 }
 
 export interface ChannelDetails { channelId: string; title: string; description?: string; thumbnail?: string; subscriberCount?: number; videoCount?: number }
 
 export async function fetchChannel(channelId: string, signal?: AbortSignal): Promise<ChannelDetails> {
+  const cached = await cacheGet<ChannelDetails>(`channel:${channelId}`)
+  if (cached) return cached.value
   const data = await apiFetch<{ items?: Array<{ id: string; snippet?: { title?: string; description?: string; thumbnails?: { high?: { url: string }; medium?: { url: string } } }; statistics?: { subscriberCount?: string; videoCount?: string } }> }>('channels', { part: 'snippet,statistics', id: channelId }, signal)
   const item = data.items?.[0]
   if (!item) throw new Error('Channel is unavailable')
-  return { channelId: item.id, title: item.snippet?.title ?? 'Channel', description: item.snippet?.description, thumbnail: item.snippet?.thumbnails?.high?.url ?? item.snippet?.thumbnails?.medium?.url, subscriberCount: item.statistics?.subscriberCount ? Number(item.statistics.subscriberCount) : undefined, videoCount: item.statistics?.videoCount ? Number(item.statistics.videoCount) : undefined }
+  const value = { channelId: item.id, title: item.snippet?.title ?? 'Channel', description: item.snippet?.description, thumbnail: item.snippet?.thumbnails?.high?.url ?? item.snippet?.thumbnails?.medium?.url, subscriberCount: item.statistics?.subscriberCount ? Number(item.statistics.subscriberCount) : undefined, videoCount: item.statistics?.videoCount ? Number(item.statistics.videoCount) : undefined }
+  await cachePut(`channel:${channelId}`, value, METADATA_TTL)
+  return value
 }
 
 export async function listChannelVideos(channelId: string, kind: 'video' | 'live' = 'video', pageToken?: string, signal?: AbortSignal): Promise<{ items: VideoRef[]; nextPageToken?: string }> {

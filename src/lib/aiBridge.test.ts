@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseSmartSearch, parseYTRec } from './aiBridge'
+import { parseAIImport, parseSmartSearch, parseYTRec } from './aiBridge'
 
 describe('AI import validation', () => {
   it('accepts YTREC v1 and warns about unknown fields', () => {
@@ -14,5 +14,9 @@ describe('AI import validation', () => {
   it('limits smart search to ten queries', () => {
     const searches = Array.from({ length: 11 }, (_, i) => ({ query: `q${i}` }))
     expect(() => parseSmartSearch(JSON.stringify({ version: 1, type: 'youtube_search', searches }))).toThrow(/at most 10/)
+  })
+  it('bounds and dispatches input before trusting the document type', () => {
+    expect(parseAIImport('{"version":1,"type":"youtube_search","searches":[{"query":"tablet"}]}').type).toBe('youtube_search')
+    expect(() => parseAIImport(' '.repeat(64 * 1024 + 1))).toThrow(/64 KiB/)
   })
 })

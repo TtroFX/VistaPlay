@@ -3,6 +3,7 @@ import type { VideoRef } from '../domain/types'
 export interface YTRecItem { videoId: string; title?: string; channel?: string; reason: string; priority: number }
 export interface YTRecImport { version: 1; type: 'youtube_recommendations'; query: string; items: YTRecItem[]; warnings: string[] }
 export interface SmartSearchImport { version: 1; type: 'youtube_search'; searches: Array<{ query: string; filters?: { shorts?: boolean; live?: boolean } }>; warnings: string[] }
+export type AIImportDocument = YTRecImport | SmartSearchImport
 
 function parseStrictJson(input: string): unknown {
   const bytes = new TextEncoder().encode(input).byteLength
@@ -13,8 +14,19 @@ function parseStrictJson(input: string): unknown {
 
 function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === 'object' && !Array.isArray(value) }
 
-export function parseYTRec(input: string): YTRecImport {
+export function parseAIImport(input: string): AIImportDocument {
   const value = parseStrictJson(input)
+  if (!isRecord(value)) throw new Error('Root must be a JSON object')
+  if (value.type === 'youtube_recommendations') return parseYTRecValue(value)
+  if (value.type === 'youtube_search') return parseSmartSearchValue(value)
+  throw new Error('Invalid import type')
+}
+
+export function parseYTRec(input: string): YTRecImport {
+  return parseYTRecValue(parseStrictJson(input))
+}
+
+function parseYTRecValue(value: unknown): YTRecImport {
   if (!isRecord(value)) throw new Error('Root must be a JSON object')
   if (value.version !== 1) throw new Error('Unsupported YTREC version')
   if (value.type !== 'youtube_recommendations') throw new Error('Invalid import type')
@@ -33,7 +45,10 @@ export function parseYTRec(input: string): YTRecImport {
 }
 
 export function parseSmartSearch(input: string): SmartSearchImport {
-  const value = parseStrictJson(input)
+  return parseSmartSearchValue(parseStrictJson(input))
+}
+
+function parseSmartSearchValue(value: unknown): SmartSearchImport {
   if (!isRecord(value) || value.version !== 1 || value.type !== 'youtube_search') throw new Error('Invalid or unsupported smart search document')
   if (!Array.isArray(value.searches) || value.searches.length > 10) throw new Error('searches must contain at most 10 queries')
   const warnings: string[] = []

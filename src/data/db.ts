@@ -12,6 +12,14 @@ function request<T>(value: IDBRequest<T>): Promise<T> {
   })
 }
 
+function transactionDone(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'))
+  })
+}
+
 function openRaw(name: string, version?: number): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = version ? indexedDB.open(name, version) : indexedDB.open(name)
@@ -43,11 +51,17 @@ async function backupBeforeUpgrade(version: number): Promise<void> {
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })
-  const tx = backups.transaction('snapshots', 'readwrite')
-  tx.objectStore('snapshots').put({ id: crypto.randomUUID(), sourceVersion: version, createdAt: new Date().toISOString(), payload })
-  const all = await request(tx.objectStore('snapshots').getAll())
+  const writeSnapshot = backups.transaction('snapshots', 'readwrite')
+  writeSnapshot.objectStore('snapshots').put({ id: crypto.randomUUID(), sourceVersion: version, createdAt: new Date().toISOString(), payload })
+  await transactionDone(writeSnapshot)
+  const all = await request(backups.transaction('snapshots', 'readonly').objectStore('snapshots').getAll())
   const cutoff = Date.now() - 7 * 86400000
-  for (const snapshot of all as Array<{ id: string; createdAt: string }>) if (Date.parse(snapshot.createdAt) < cutoff) tx.objectStore('snapshots').delete(snapshot.id)
+  const stale = (all as Array<{ id: string; createdAt: string }>).filter((snapshot) => Date.parse(snapshot.createdAt) < cutoff)
+  if (stale.length) {
+    const removeSnapshots = backups.transaction('snapshots', 'readwrite')
+    for (const snapshot of stale) removeSnapshots.objectStore('snapshots').delete(snapshot.id)
+    await transactionDone(removeSnapshots)
+  }
   backups.close()
 }
 
@@ -82,21 +96,21 @@ export async function dbPut<T>(store: StoreName, key: IDBValidKey, value: T): Pr
   const db = await openDatabase()
   const tx = db.transaction(store, 'readwrite')
   tx.objectStore(store).put(value, key)
-  await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error) })
+  await transactionDone(tx)
 }
 
 export async function dbDelete(store: StoreName, key: IDBValidKey): Promise<void> {
   const db = await openDatabase()
   const tx = db.transaction(store, 'readwrite')
   tx.objectStore(store).delete(key)
-  await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error) })
+  await transactionDone(tx)
 }
 
 export async function dbClear(store: StoreName): Promise<void> {
   const db = await openDatabase()
   const tx = db.transaction(store, 'readwrite')
   tx.objectStore(store).clear()
-  await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error) })
+  await transactionDone(tx)
 }
 
 export async function cacheGet<T>(key: string): Promise<{ expiresAt: number; value: T } | undefined> {
@@ -116,18 +130,23 @@ export async function cachePut<T>(key: string, value: T, ttlMs: number): Promise
 
 export async function enforceCacheLimit(limitMb: number): Promise<void> {
   const db = await openDatabase()
-  const tx = db.transaction('cache', 'readwrite')
-  const store = tx.objectStore('cache')
-  const keys = await request(store.getAllKeys())
-  const values = await request(store.getAll()) as Array<{ size?: number; accessedAt?: number; expiresAt?: number }>
+  const readTx = db.transaction('cache', 'readonly')
+  const readStore = readTx.objectStore('cache')
+  const keysRequest = readStore.getAllKeys()
+  const valuesRequest = readStore.getAll()
+  const [keys, values] = await Promise.all([request(keysRequest), request(valuesRequest)]) as [IDBValidKey[], Array<{ size?: number; accessedAt?: number; expiresAt?: number }>]
   const entries = values.map((value, index) => ({ key: keys[index], size: value.size ?? new TextEncoder().encode(JSON.stringify(value)).byteLength, accessedAt: value.accessedAt ?? 0, expired: (value.expiresAt ?? Infinity) <= Date.now() }))
   let total = entries.reduce((sum, entry) => sum + entry.size, 0)
   const limit = limitMb * 1024 * 1024
+  const remove: IDBValidKey[] = []
   for (const entry of entries.sort((a, b) => Number(b.expired) - Number(a.expired) || a.accessedAt - b.accessedAt)) {
     if (!entry.expired && total <= limit) break
-    store.delete(entry.key); total -= entry.size
+    remove.push(entry.key); total -= entry.size
   }
-  await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error) })
+  if (!remove.length) return
+  const removeTx = db.transaction('cache', 'readwrite')
+  for (const key of remove) removeTx.objectStore('cache').delete(key)
+  await transactionDone(removeTx)
 }
 
 export async function closeDatabaseForTests(): Promise<void> {
