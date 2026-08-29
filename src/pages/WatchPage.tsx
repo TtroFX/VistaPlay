@@ -20,7 +20,7 @@ function mapComments(data: YouTubeCommentsResponse): CommentView[] {
 export default function WatchPage() {
   const app = useApp(); const navigate = useNavigate(); const [params] = useSearchParams(); const videoId = params.get('v')
   const [tab, setTab] = useState<WatchTab>(app.state.settings.layout.defaultWatchTab as WatchTab)
-  const [comments, setComments] = useState<CommentView[]>([]); const [commentNext, setCommentNext] = useState<string>(); const [commentLoading, setCommentLoading] = useState(false); const [commentError, setCommentError] = useState(''); const [commentQuery, setCommentQuery] = useState(''); const [commentOrder, setCommentOrder] = useState<'relevance' | 'time'>('relevance')
+  const [comments, setComments] = useState<CommentView[]>([]); const [commentNext, setCommentNext] = useState<string>(); const [commentLoading, setCommentLoading] = useState(false); const [commentError, setCommentError] = useState(''); const [commentKeyword, setCommentKeyword] = useState(''); const [commentUsername, setCommentUsername] = useState(''); const [commentHasTimestamp, setCommentHasTimestamp] = useState(false); const [commentHasReplies, setCommentHasReplies] = useState(false); const [commentOrder, setCommentOrder] = useState<'relevance' | 'time'>('relevance')
   const [sponsors, setSponsors] = useState<SponsorSegment[]>([]); const [descriptionOpen, setDescriptionOpen] = useState(false)
   const video = videoId ? app.state.videos[videoId] ?? (app.currentVideo?.videoId === videoId ? app.currentVideo : undefined) : undefined
   const chapters = useMemo(() => extractChapters(video?.description ?? '', video?.durationSeconds), [video?.description, video?.durationSeconds])
@@ -55,7 +55,13 @@ export default function WatchPage() {
 
   if (!videoId || videoId.length !== 11) return <div className="page"><div className="capability-notice"><strong>正しいVideo IDが必要です</strong></div></div>
   const shown = video ?? { videoId, title: `Video ${videoId}` }
-  const filteredComments = comments.filter((comment) => !commentQuery.trim() || `${comment.author} ${comment.text}`.toLowerCase().includes(commentQuery.toLowerCase()))
+  const filteredComments = comments.filter((comment) => {
+    const keywordMatches = !commentKeyword.trim() || comment.text.toLowerCase().includes(commentKeyword.trim().toLowerCase())
+    const usernameMatches = !commentUsername.trim() || comment.author.toLowerCase().includes(commentUsername.trim().toLowerCase())
+    const timestampMatches = !commentHasTimestamp || extractTimestamps(comment.text, shown.durationSeconds).length > 0
+    const repliesMatch = !commentHasReplies || comment.replies.length > 0
+    return keywordMatches && usernameMatches && timestampMatches && repliesMatch
+  })
   return <div className={`watch-page ${app.state.settings.layout.cinemaMode ? 'cinema' : ''}`}>
     <div className="watch-content-grid">
       <section className="watch-primary">
@@ -72,7 +78,7 @@ export default function WatchPage() {
         {tab === 'captions' && <div className="capability-copy"><Captions /><h3>YouTube標準Caption</h3><p>字幕はPlayer内の正式Caption操作から利用できます。iframe字幕のscrapingは行いません。</p></div>}
         {tab === 'livechat' && <iframe className="live-chat-frame" title="YouTube Live Chat" src={`https://www.youtube.com/live_chat?v=${videoId}&embed_domain=${window.location.hostname}`} />}
         {tab === 'overview' && <div className="overview-list"><div><span>Duration</span><strong>{formatDuration(shown.durationSeconds)}</strong></div><div><span>Category</span><strong>{shown.categoryId ?? 'Unavailable'}</strong></div><div><span>Watch state</span><strong>{app.state.history[videoId]?.state ?? 'UNWATCHED'}</strong></div>{shown.tags?.slice(0, 12).map((tag) => <span className="tag-chip" key={tag}>{tag}</span>)}</div>}
-        {tab === 'comments' && <div className="comments-panel"><div className="comment-toolbar"><input value={commentQuery} onChange={(e) => setCommentQuery(e.target.value)} placeholder="取得済みCommentを検索" /><select value={commentOrder} onChange={(e) => { setCommentOrder(e.target.value as any); setComments([]) }}><option value="relevance">Relevance</option><option value="time">Newest</option></select></div>{commentError && <p className="error-copy">{commentError}</p>}{filteredComments.map((comment) => <CommentItem comment={comment} duration={shown.durationSeconds} key={comment.id} />)}{commentNext && comments.length < 200 && <button className="load-comments" disabled={commentLoading} onClick={() => void loadComments(true)}>{commentLoading ? '読み込み中…' : 'さらに20件取得'}</button>}</div>}
+        {tab === 'comments' && <div className="comments-panel"><div className="comment-toolbar"><input value={commentKeyword} onChange={(e) => setCommentKeyword(e.target.value)} placeholder="Keyword" aria-label="Comment keyword" /><input value={commentUsername} onChange={(e) => setCommentUsername(e.target.value)} placeholder="Username" aria-label="Comment username" /><select value={commentOrder} onChange={(e) => { setCommentOrder(e.target.value as 'relevance' | 'time'); setComments([]); setCommentNext(undefined) }}><option value="relevance">Relevance</option><option value="time">Newest</option></select><label className="check-label compact-check"><input type="checkbox" checked={commentHasTimestamp} onChange={(e) => setCommentHasTimestamp(e.target.checked)} />Timestampあり</label><label className="check-label compact-check"><input type="checkbox" checked={commentHasReplies} onChange={(e) => setCommentHasReplies(e.target.checked)} />Replyあり</label></div>{commentError && <p className="error-copy">{commentError}</p>}{!commentLoading && !filteredComments.length && <p className="pane-empty">取得済みCommentに一致する結果はありません。</p>}{filteredComments.map((comment) => <CommentItem comment={comment} duration={shown.durationSeconds} key={comment.id} />)}{commentNext && comments.length < 200 && <button className="load-comments" disabled={commentLoading} onClick={() => void loadComments(true)}>{commentLoading ? '読み込み中…' : 'さらに20件取得'}</button>}</div>}
       </div></aside>}
     </div>
     <section className="notes-inline"><NotebookPen /><div><strong>Note</strong><span>Plain text / 最大20,000文字 / focusを外すと保存</span></div><textarea maxLength={20000} defaultValue={app.state.notes.find((note) => note.videoId === videoId)?.text ?? ''} onBlur={(e) => app.saveNote(videoId, e.target.value)} /></section>

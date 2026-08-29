@@ -1,0 +1,15 @@
+import { describe, expect, it } from 'vitest'
+import { createDefaultState } from '../config/features'
+import { evaluateSmartFolder } from './smartFolders'
+
+describe('smart folder groups', () => {
+  it('supports AND/OR and date age conditions', () => {
+    const state = createDefaultState()
+    state.videos.a = { videoId: 'a', title: 'A', channelId: 'c1', publishedAt: '2026-01-08T00:00:00.000Z' }
+    state.videos.b = { videoId: 'b', title: 'B', channelId: 'c2', publishedAt: '2025-12-01T00:00:00.000Z' }
+    state.favorites = ['a']
+    const now = Date.parse('2026-01-10T00:00:00.000Z')
+    const folder = { id: 'f', name: 'Recent favorites', operator: 'and' as const, updatedAt: '', conditions: [{ field: 'favorite' as const, op: 'eq' as const, value: true }, { field: 'publishedDate' as const, op: 'lt' as const, value: 7 }] }
+    expect(evaluateSmartFolder(folder, state, now).map((video) => video.videoId)).toEqual(['a'])
+  })
+})
