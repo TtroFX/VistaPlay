@@ -23,6 +23,6 @@ Schema version 3 stores settings, videos, queue, progress, sessions, library, ca
 
 ## Cloud conflict baseline
 
-The Supabase v1 adapter uses a whole-state monotonic revision as the transport gate. Entity timestamps and tombstone-ready models are preserved so the next migration can apply field-level LWW, set add/remove clocks, sticky Completed, History union, Progress latest-wins, and Queue whole-version rules without changing local IDs. Cache and AI conversation text never sync.
+The Supabase adapter stores one RLS-protected payload per user and uses an optimistic monotonic revision gate. Before upload, both sides are merged using field clocks for Settings, add/remove clocks for Favorites/Watch Later/Inbox, entity tombstones for Folder/Tag deletion, History union with sticky Completed, latest Progress and Notes, and whole-version Queue LWW. Tombstones are retained for 30 days.
 
-Current cloud sync chooses the higher revision, then writes one incremented revision. This avoids silent overwrites but is not a collaborative real-time editor.
+Cached video metadata, the device player restore position, and AI import history are local-only and are removed from the cloud payload. A revision-conditional update retries twice if another device writes between read and update.

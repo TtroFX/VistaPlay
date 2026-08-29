@@ -4,6 +4,7 @@ import { loadAppState, saveAppState, saveWatchSession } from '../data/repository
 import type { FeatureKey, PersistedAppState, QueueItem, SavedQueue, ToastMessage, VideoRef, WatchProgress, WatchSession } from '../domain/types'
 import { isCompleted } from '../lib/playerMath'
 import { playerEngine, type PlayerSnapshot } from '../player/PlayerEngine'
+import { stampSyncMetadata } from '../sync/conflicts'
 
 interface AppContextValue {
   state: PersistedAppState
@@ -88,7 +89,11 @@ export function AppProvider({ children }: PropsWithChildren) {
   }, [state, hydrated])
 
   const mutate = useCallback((updater: (current: PersistedAppState) => PersistedAppState) => {
-    setState((current) => ({ ...updater(current), revision: current.revision + 1, updatedAt: new Date().toISOString() }))
+    setState((current) => {
+      const now = new Date().toISOString()
+      const next = updater(current)
+      return { ...next, syncMetadata: stampSyncMetadata(current, next, now), revision: current.revision + 1, updatedAt: now }
+    })
   }, [])
 
   const notify = useCallback((message: string, tone: ToastMessage['tone'] = 'default', undo?: () => void, duration = undo ? 5000 : 3200) => {

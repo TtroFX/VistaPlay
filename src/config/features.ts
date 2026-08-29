@@ -48,6 +48,12 @@ export function createDefaultState(): PersistedAppState {
   return {
     settings: structuredClone(defaultSettings), videos: {}, queue: [], savedQueues: [], favorites: [], watchLater: [], inbox: [], history: {},
     folders: [], tags: [], smartFolders: [], notes: [], channelPreferences: [], videoPreferences: [], autoAddRules: [], searchHistory: [], aiImportHistory: [], revision: 0,
+    syncMetadata: {
+      settings: {},
+      added: { favorites: {}, watchLater: {}, inbox: {} },
+      removed: { favorites: {}, watchLater: {}, inbox: {}, folders: {}, tags: {} },
+      queueUpdatedAt: new Date(0).toISOString()
+    },
     updatedAt: new Date(0).toISOString()
   }
 }

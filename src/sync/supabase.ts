@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { PersistedAppState } from '../domain/types'
+import { mergeCloudStates, prepareCloudState } from './conflicts'
 
 let client: SupabaseClient | undefined
 
@@ -29,12 +30,22 @@ export async function syncState(local: PersistedAppState): Promise<PersistedAppS
   const { data: auth } = await supabase.auth.getUser()
   const user = auth.user
   if (!user) throw new Error('Sign in before enabling cloud sync')
-  const { data: remote, error: readError } = await supabase.from('user_state').select('payload,revision,updated_at').eq('user_id', user.id).maybeSingle()
-  if (readError) throw readError
-  let winner = local
-  if (remote?.payload && Number(remote.revision) > local.revision) winner = remote.payload as PersistedAppState
-  const outgoing = { ...winner, revision: Math.max(winner.revision, Number(remote?.revision ?? 0)) + 1, updatedAt: new Date().toISOString() }
-  const { error } = await supabase.from('user_state').upsert({ user_id: user.id, payload: outgoing, revision: outgoing.revision, updated_at: outgoing.updatedAt })
-  if (error) throw error
-  return outgoing
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data: remote, error: readError } = await supabase.from('user_state').select('payload,revision,updated_at').eq('user_id', user.id).maybeSingle()
+    if (readError) throw readError
+    const merged = remote?.payload ? mergeCloudStates(local, remote.payload as PersistedAppState) : local
+    const now = new Date().toISOString()
+    const next = { ...merged, revision: Math.max(merged.revision, Number(remote?.revision ?? 0)) + 1, updatedAt: now }
+    const payload = prepareCloudState(next)
+    if (!remote) {
+      const { error } = await supabase.from('user_state').insert({ user_id: user.id, payload, revision: next.revision, updated_at: now })
+      if (!error) return next
+      if (error.code === '23505') continue
+      throw error
+    }
+    const { data: updated, error } = await supabase.from('user_state').update({ payload, revision: next.revision, updated_at: now }).eq('user_id', user.id).eq('revision', remote.revision).select('revision').maybeSingle()
+    if (error) throw error
+    if (updated) return next
+  }
+  throw new Error('Cloud state changed during sync. Try again.')
 }

@@ -7,6 +7,7 @@ const STATE_KEY = 'app-state-v3'
 function mergeState(raw?: Partial<PersistedAppState>): PersistedAppState {
   const base = createDefaultState()
   if (!raw) return base
+  const syncMetadata = raw.syncMetadata ?? base.syncMetadata
   return {
     ...base,
     ...raw,
@@ -17,6 +18,23 @@ function mergeState(raw?: Partial<PersistedAppState>): PersistedAppState {
       layout: { ...defaultSettings.layout, ...raw.settings?.layout },
       playback: { ...defaultSettings.playback, ...raw.settings?.playback },
       features: { ...defaultSettings.features, ...raw.settings?.features }
+    },
+    syncMetadata: {
+      ...base.syncMetadata,
+      ...syncMetadata,
+      settings: { ...base.syncMetadata.settings, ...syncMetadata.settings },
+      added: {
+        favorites: { ...base.syncMetadata.added.favorites, ...syncMetadata.added?.favorites },
+        watchLater: { ...base.syncMetadata.added.watchLater, ...syncMetadata.added?.watchLater },
+        inbox: { ...base.syncMetadata.added.inbox, ...syncMetadata.added?.inbox }
+      },
+      removed: {
+        favorites: { ...base.syncMetadata.removed.favorites, ...syncMetadata.removed?.favorites },
+        watchLater: { ...base.syncMetadata.removed.watchLater, ...syncMetadata.removed?.watchLater },
+        inbox: { ...base.syncMetadata.removed.inbox, ...syncMetadata.removed?.inbox },
+        folders: { ...base.syncMetadata.removed.folders, ...syncMetadata.removed?.folders },
+        tags: { ...base.syncMetadata.removed.tags, ...syncMetadata.removed?.tags }
+      }
     }
   }
 }
