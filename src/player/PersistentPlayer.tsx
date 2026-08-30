@@ -1,10 +1,25 @@
 import { ChevronUp, Gauge, Maximize2, Pause, Play, Repeat, RotateCcw, RotateCw, Volume2, VolumeX, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { nextPlaybackRate } from '../lib/playerMath'
+import type { WatchSession } from '../domain/types'
+import { nextPlaybackRate, resolvePlaybackEndAction } from '../lib/playerMath'
 import { formatDuration } from '../lib/time'
 import { useApp } from '../store/AppStore'
 import { playerEngine } from './PlayerEngine'
+
+interface ActiveSession {
+  id: string
+  videoId: string
+  channelId?: string
+  startedAt: string
+  real: number
+  media: number
+  rates: Map<number, number>
+  seekEvents: WatchSession['seekEvents']
+  pendingWatchSeconds: number
+  lastPosition: number
+  duration: number
+}
 
 export function PersistentPlayer() {
   const app = useApp()
@@ -17,9 +32,11 @@ export function PersistentPlayer() {
   const [b, setB] = useState<number>()
   const boostRate = useRef<number | undefined>(undefined)
   const lastProgress = useRef(performance.now())
-  const session = useRef<{ id: string; videoId: string; startedAt: string; real: number; media: number; rates: Map<number, number> } | undefined>(undefined)
+  const session = useRef<ActiveSession | undefined>(undefined)
   const full = location.pathname === '/watch'
   const current = app.currentVideo
+  const latest = useRef({ app, current, a, b })
+  latest.current = { app, current, a, b }
 
   const preferredRate = useMemo(() => {
     if (!current) return app.state.settings.playback.globalRate
@@ -36,45 +53,109 @@ export function PersistentPlayer() {
   }, [current?.videoId])
 
   useEffect(() => {
-    if (!current) return
-    if (app.player.state === 'playing' && !session.current) session.current = { id: crypto.randomUUID(), videoId: current.videoId, startedAt: new Date().toISOString(), real: 0, media: 0, rates: new Map() }
-    if (app.player.state !== 'playing' && session.current) finishSession()
+    const active = session.current
+    if (active && active.videoId !== current?.videoId) finishSession()
+    if (app.player.state === 'playing' && current && !session.current) {
+      session.current = {
+        id: crypto.randomUUID(), videoId: current.videoId, channelId: current.channelId,
+        startedAt: new Date().toISOString(), real: 0, media: 0, rates: new Map(), seekEvents: [],
+        pendingWatchSeconds: 0, lastPosition: app.player.position, duration: app.player.duration
+      }
+    } else if (app.player.state !== 'playing' && session.current) {
+      updateSessionSnapshot()
+      flushProgress()
+      if (app.player.state === 'ended' || app.player.state === 'error' || app.player.state === 'idle') finishSession()
+    }
+    lastProgress.current = performance.now()
   }, [app.player.state, current?.videoId])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      const now = performance.now(); const delta = Math.min(1.5, Math.max(0, (now - lastProgress.current) / 1000)); lastProgress.current = now
-      if (app.player.state !== 'playing' || !current) return
-      if (session.current) {
-        session.current.real += delta; session.current.media += delta * app.player.rate
-        session.current.rates.set(app.player.rate, (session.current.rates.get(app.player.rate) ?? 0) + delta)
+      const now = performance.now()
+      const delta = Math.min(1.5, Math.max(0, (now - lastProgress.current) / 1000))
+      lastProgress.current = now
+      const { app: currentApp, current: video, a: pointA, b: pointB } = latest.current
+      const active = session.current
+      if (currentApp.player.state !== 'playing' || !video || !active || active.videoId !== video.videoId) return
+
+      const expectedPosition = active.lastPosition + delta * currentApp.player.rate
+      if (Math.abs(currentApp.player.position - expectedPosition) > 3 && active.seekEvents.length < 200) {
+        active.seekEvents.push({ from: active.lastPosition, to: currentApp.player.position, at: new Date().toISOString() })
       }
-      if (Math.floor(app.player.position) % 5 === 0) app.recordProgress(current.videoId, app.player.position, app.player.duration, delta)
-      if (a !== undefined && b !== undefined && app.player.position >= b) playerEngine.seekTo(a)
+      active.real += delta
+      active.media += delta * currentApp.player.rate
+      active.pendingWatchSeconds += delta
+      active.lastPosition = currentApp.player.position
+      active.duration = currentApp.player.duration
+      active.rates.set(currentApp.player.rate, (active.rates.get(currentApp.player.rate) ?? 0) + delta)
+      if (active.pendingWatchSeconds >= 5) flushProgress()
+      if (pointA !== undefined && pointB !== undefined && currentApp.player.position >= pointB) performSeek(pointA, false)
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [a, b, app.player.duration, app.player.position, app.player.rate, app.player.state, app.recordProgress, current])
+  }, [])
 
   useEffect(() => {
     if (app.player.state !== 'ended' || !current) return
     app.recordProgress(current.videoId, app.player.duration, app.player.duration)
-    if (repeat) { playerEngine.seekTo(0); playerEngine.play() }
-    else if (app.state.queue.length) app.playNext()
-  }, [app.player.state])
+    const channelAutoplay = app.state.channelPreferences.find((item) => item.channelId === current.channelId)?.queueAutoplay
+    const action = resolvePlaybackEndAction(repeat, app.state.queue.length, channelAutoplay ?? app.state.settings.playback.continuousPlay)
+    if (action === 'repeat') { performSeek(0, false); playerEngine.play() }
+    else if (action === 'next') app.playNext()
+  }, [app.player.state, current?.videoId])
 
   useEffect(() => {
-    const save = () => { if (current && app.player.position >= 10) app.recordProgress(current.videoId, app.player.position, app.player.duration) }
-    document.addEventListener('visibilitychange', save); window.addEventListener('pagehide', save)
-    return () => { document.removeEventListener('visibilitychange', save); window.removeEventListener('pagehide', save); save() }
-  }, [app.player.duration, app.player.position, app.recordProgress, current])
+    const save = () => {
+      updateSessionSnapshot()
+      flushProgress()
+      const { app: currentApp, current: video } = latest.current
+      if (!session.current && video && currentApp.player.position >= 10) currentApp.recordProgress(video.videoId, currentApp.player.position, currentApp.player.duration)
+    }
+    const finish = () => { save(); finishSession() }
+    document.addEventListener('visibilitychange', save)
+    window.addEventListener('pagehide', finish)
+    return () => { document.removeEventListener('visibilitychange', save); window.removeEventListener('pagehide', finish); save() }
+  }, [])
+
+  useEffect(() => {
+    updateSessionSnapshot()
+    flushProgress()
+  }, [location.pathname])
+
+  function updateSessionSnapshot() {
+    const active = session.current
+    if (!active) return
+    active.lastPosition = latest.current.app.player.position
+    active.duration = latest.current.app.player.duration
+  }
+
+  function flushProgress() {
+    const active = session.current
+    if (!active || active.pendingWatchSeconds <= 0) return
+    latest.current.app.recordProgress(active.videoId, active.lastPosition, active.duration, active.pendingWatchSeconds)
+    active.pendingWatchSeconds = 0
+  }
 
   function finishSession() {
-    const value = session.current; if (!value || value.real < 0.25 || !current) { session.current = undefined; return }
-    app.recordSession({ sessionId: value.id, videoId: value.videoId, channelId: current.channelId, startedAt: value.startedAt, endedAt: new Date().toISOString(), watchedMediaSeconds: value.media, realElapsedSeconds: value.real, playbackRates: [...value.rates].map(([rate, realSeconds]) => ({ rate, realSeconds })), seekEvents: [], completionRate: app.player.duration ? Math.min(1, app.player.position / app.player.duration) : 0 })
+    updateSessionSnapshot()
+    flushProgress()
+    const value = session.current
+    if (!value || value.real < 0.25) { session.current = undefined; return }
+    latest.current.app.recordSession({ sessionId: value.id, videoId: value.videoId, channelId: value.channelId, startedAt: value.startedAt, endedAt: new Date().toISOString(), watchedMediaSeconds: value.media, realElapsedSeconds: value.real, playbackRates: [...value.rates].map(([rate, realSeconds]) => ({ rate, realSeconds })), seekEvents: value.seekEvents, completionRate: value.duration ? Math.min(1, value.lastPosition / value.duration) : 0 })
     session.current = undefined
   }
 
-  function seek(delta: number) { playerEngine.seekBy(delta); app.notify(`${delta > 0 ? '+' : ''}${delta}秒`) }
+  function performSeek(target: number, record = true) {
+    const snapshot = latest.current.app.player
+    const actualTarget = Math.max(0, Math.min(target, snapshot.duration || target))
+    const active = session.current
+    if (active) {
+      if (record && Math.abs(actualTarget - snapshot.position) >= 0.5 && active.seekEvents.length < 200) active.seekEvents.push({ from: snapshot.position, to: actualTarget, at: new Date().toISOString() })
+      active.lastPosition = actualTarget
+    }
+    playerEngine.seekTo(actualTarget)
+  }
+
+  function seek(delta: number) { performSeek(app.player.position + delta); app.notify(`${delta > 0 ? '+' : ''}${delta}秒`) }
   function setPointB() { if (a === undefined || app.player.position <= a || app.player.position - a < 2) { app.notify('BはAより2秒以上後に設定してください', 'error'); return } setB(app.player.position) }
   function boostStart() { boostRate.current = app.player.rate; playerEngine.setRate(nextPlaybackRate(app.player.rate, app.player.availableRates, app.state.settings.playback.boostMode)) }
   function boostEnd() { if (boostRate.current !== undefined) playerEngine.setRate(boostRate.current); boostRate.current = undefined }
@@ -89,7 +170,7 @@ export function PersistentPlayer() {
       {!full && <button className="mini-title" onClick={() => navigate(`/watch?v=${current.videoId}`)}><strong>{current.title}</strong><span>{current.channelTitle}</span></button>}
       <div className="timeline-row">
         <span>{formatDuration(app.player.position)}</span>
-        <input type="range" min="0" max={app.player.duration || 1} step="0.1" value={app.player.position} onChange={(event) => playerEngine.seekTo(Number(event.target.value))} aria-label="再生位置" />
+        <input type="range" min="0" max={app.player.duration || 1} step="0.1" value={app.player.position} onChange={(event) => performSeek(Number(event.target.value))} aria-label="再生位置" />
         <span>{formatDuration(app.player.duration)}</span>
       </div>
       <div className="controls-row">

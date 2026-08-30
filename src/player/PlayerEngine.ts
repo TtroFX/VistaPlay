@@ -81,7 +81,11 @@ class PlayerEngine extends EventTarget {
   async mount(host: HTMLElement, videoId: string, startSeconds = 0, preferredRate = 1): Promise<void> {
     this.requestedStart = startSeconds
     this.preferredRate = preferredRate
-    if (this.player && this.host === host) { this.cue(videoId, startSeconds, preferredRate); return }
+    if (this.player && this.host === host) {
+      this.cue(videoId, startSeconds, preferredRate)
+      this.startPolling()
+      return
+    }
     this.player?.destroy()
     this.host = host
     this.emit({ videoId, ready: false, state: 'idle', error: undefined, position: startSeconds })
@@ -140,7 +144,12 @@ class PlayerEngine extends EventTarget {
   play(): void { this.player?.playVideo() }
   pause(): void { this.player?.pauseVideo() }
   toggle(): void { if (this.snapshot.state === 'playing') this.pause(); else this.play() }
-  stop(): void { this.player?.stopVideo(); this.emit({ state: 'idle', position: 0 }) }
+  stop(): void {
+    window.clearInterval(this.timer)
+    this.timer = undefined
+    this.player?.stopVideo()
+    this.emit({ state: 'idle', position: 0 })
+  }
   seekTo(seconds: number): void { this.player?.seekTo(Math.max(0, Math.min(seconds, this.snapshot.duration || seconds)), true); this.poll() }
   seekBy(seconds: number): void { this.seekTo(this.snapshot.position + seconds) }
   setRate(rate: number): void { if (this.snapshot.availableRates.includes(rate)) this.player?.setPlaybackRate(rate) }
