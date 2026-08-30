@@ -167,7 +167,16 @@ export function AppProvider({ children }: PropsWithChildren) {
   const toggleWatchLater = useCallback((video: VideoRef) => toggleList('watchLater', video, '後で見る'), [toggleList])
   const toggleInbox = useCallback((video: VideoRef) => toggleList('inbox', video, 'Inbox'), [toggleList])
 
-  const archiveVideo = useCallback((videoId: string) => mutate((current) => ({ ...current, history: { ...current.history, [videoId]: { ...(current.history[videoId] ?? { videoId, position: 0, duration: 0, watchedSeconds: 0 }), state: 'ARCHIVED', updatedAt: new Date().toISOString() } } })), [mutate])
+  const archiveVideo = useCallback((videoId: string) => {
+    const previous = state.history[videoId]
+    mutate((current) => ({ ...current, history: { ...current.history, [videoId]: { ...(current.history[videoId] ?? { videoId, position: 0, duration: 0, watchedSeconds: 0 }), state: 'ARCHIVED', updatedAt: new Date().toISOString() } } }))
+    notify('Archiveへ移動しました', 'default', () => mutate((current) => {
+      const history = { ...current.history }
+      if (previous) history[videoId] = { ...previous, updatedAt: new Date().toISOString() }
+      else delete history[videoId]
+      return { ...current, history }
+    }))
+  }, [mutate, notify, state.history])
   const addFolder = useCallback((name: string, parentId?: string) => mutate((current) => ({ ...current, folders: name.trim() && (!parentId || !current.folders.find((folder) => folder.id === parentId)?.parentId) ? [...current.folders, { id: crypto.randomUUID(), name: name.trim(), parentId, videoIds: [], pinned: false, updatedAt: new Date().toISOString() }] : current.folders })), [mutate])
   const toggleFolderVideo = useCallback((folderId: string, videoId: string) => mutate((current) => ({ ...current, folders: current.folders.map((folder) => folder.id === folderId ? { ...folder, videoIds: folder.videoIds.includes(videoId) ? folder.videoIds.filter((id) => id !== videoId) : [...folder.videoIds, videoId], updatedAt: new Date().toISOString() } : folder) })), [mutate])
   const addTag = useCallback((display: string, videoId: string, color?: string) => mutate((current) => {
@@ -177,7 +186,17 @@ export function AppProvider({ children }: PropsWithChildren) {
     if (existing) return { ...current, tags: current.tags.map((tag) => tag.id === existing.id ? { ...tag, videoIds: tag.videoIds.includes(videoId) ? tag.videoIds : [...tag.videoIds, videoId], updatedAt: new Date().toISOString() } : tag) }
     return { ...current, tags: [...current.tags, { id: crypto.randomUUID(), canonical, display: trimmed, color, videoIds: [videoId], updatedAt: new Date().toISOString() }] }
   }), [mutate])
-  const removeTag = useCallback((tagId: string, videoId?: string) => mutate((current) => ({ ...current, tags: videoId ? current.tags.map((tag) => tag.id === tagId ? { ...tag, videoIds: tag.videoIds.filter((id) => id !== videoId), updatedAt: new Date().toISOString() } : tag) : current.tags.filter((tag) => tag.id !== tagId) })), [mutate])
+  const removeTag = useCallback((tagId: string, videoId?: string) => {
+    const previous = state.tags.find((tag) => tag.id === tagId)
+    if (!previous || (videoId && !previous.videoIds.includes(videoId))) return
+    mutate((current) => ({ ...current, tags: videoId ? current.tags.map((tag) => tag.id === tagId ? { ...tag, videoIds: tag.videoIds.filter((id) => id !== videoId), updatedAt: new Date().toISOString() } : tag) : current.tags.filter((tag) => tag.id !== tagId) }))
+    notify(videoId ? 'Tagを動画から外しました' : 'Tagを削除しました', 'default', () => mutate((current) => ({
+      ...current,
+      tags: videoId
+        ? current.tags.map((tag) => tag.id === tagId ? { ...tag, videoIds: tag.videoIds.includes(videoId) ? tag.videoIds : [...tag.videoIds, videoId], updatedAt: new Date().toISOString() } : tag)
+        : current.tags.some((tag) => tag.id === tagId) ? current.tags : [...current.tags, { ...previous, updatedAt: new Date().toISOString() }]
+    })))
+  }, [mutate, notify, state.tags])
   const saveNote = useCallback((videoId: string, text: string) => mutate((current) => ({ ...current, notes: [...current.notes.filter((note) => note.videoId !== videoId), { videoId, text: text.slice(0, 20000), updatedAt: new Date().toISOString() }] })), [mutate])
   const setVideoRate = useCallback((videoId: string, rate?: number) => mutate((current) => ({ ...current, videoPreferences: [...current.videoPreferences.filter((item) => item.videoId !== videoId), ...(rate ? [{ videoId, playbackRate: rate, updatedAt: new Date().toISOString() }] : [])] })), [mutate])
 
