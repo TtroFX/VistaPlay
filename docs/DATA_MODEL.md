@@ -23,6 +23,6 @@ Schema version 3 stores settings, videos, queue, progress, sessions, library, ca
 
 ## Cloud conflict baseline
 
-The Supabase adapter stores one RLS-protected payload per user and uses an optimistic monotonic revision gate. Before upload, both sides are merged using field clocks for Settings, add/remove clocks for Favorites/Watch Later/Inbox, entity tombstones for Folder/Tag deletion, History union with sticky Completed, latest Progress and Notes, and whole-version Queue LWW. Tombstones are retained for 30 days.
+The Supabase adapter stores one RLS-protected payload per user and uses an optimistic monotonic revision gate. Before upload, both sides are merged using field clocks for Settings, add/remove clocks for Favorites/Watch Later/Inbox, History union with sticky Completed, latest Progress and Notes, and whole-version Queue LWW. Deletions use entity tombstones for History, Folder, Tag, Saved Queue, Smart Folder, Note, Channel/Video Preference and Auto Add Rule so stale devices cannot resurrect removed records. Tombstones are retained for 30 days.
 
 Cached video metadata, the device player restore position, and AI import history are local-only and are removed from the cloud payload. A revision-conditional update retries twice if another device writes between read and update.

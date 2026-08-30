@@ -71,10 +71,12 @@ export interface LayoutSettings { sidebarMode: 'expanded' | 'compact' | 'hidden'
 export interface PlaybackSettings { globalRate: number; speedPresets: number[]; seekSeconds: 5 | 10 | 15 | 30; boostMode: 'next' | 'maximum'; continuousPlay: boolean }
 export interface AppSettings { theme: ThemeSettings; layout: LayoutSettings; playback: PlaybackSettings; features: Record<FeatureKey, boolean>; homeOrder: string[]; homeHidden: string[]; cacheLimitMb: 100 | 250 | 500; cloudSync: boolean; blacklist: { videos: string[]; channels: string[]; keywords: string[] }; whitelistChannels: string[]; whitelistOnly: boolean; updatedAt: string }
 
+export type SyncTombstoneKey = 'favorites' | 'watchLater' | 'inbox' | 'history' | 'folders' | 'tags' | 'savedQueues' | 'smartFolders' | 'notes' | 'channelPreferences' | 'videoPreferences' | 'autoAddRules'
+
 export interface SyncMetadata {
   settings: Record<string, string>
   added: Record<'favorites' | 'watchLater' | 'inbox', Record<string, string>>
-  removed: Record<'favorites' | 'watchLater' | 'inbox' | 'folders' | 'tags', Record<string, string>>
+  removed: Record<SyncTombstoneKey, Record<string, string>>
   queueUpdatedAt: string
 }
 

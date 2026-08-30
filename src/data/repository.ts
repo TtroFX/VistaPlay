@@ -1,5 +1,5 @@
 import { createDefaultState, defaultSettings } from '../config/features'
-import type { PersistedAppState, WatchSession } from '../domain/types'
+import type { PersistedAppState, SyncMetadata, SyncTombstoneKey, WatchSession } from '../domain/types'
 import { dbGet, dbPut, openDatabase } from './db'
 
 const STATE_KEY = 'app-state-v3'
@@ -8,6 +8,7 @@ function mergeState(raw?: Partial<PersistedAppState>): PersistedAppState {
   const base = createDefaultState()
   if (!raw) return base
   const syncMetadata = raw.syncMetadata ?? base.syncMetadata
+  const removed = Object.fromEntries((Object.keys(base.syncMetadata.removed) as SyncTombstoneKey[]).map((field) => [field, { ...base.syncMetadata.removed[field], ...syncMetadata.removed?.[field] }])) as SyncMetadata['removed']
   return {
     ...base,
     ...raw,
@@ -28,13 +29,7 @@ function mergeState(raw?: Partial<PersistedAppState>): PersistedAppState {
         watchLater: { ...base.syncMetadata.added.watchLater, ...syncMetadata.added?.watchLater },
         inbox: { ...base.syncMetadata.added.inbox, ...syncMetadata.added?.inbox }
       },
-      removed: {
-        favorites: { ...base.syncMetadata.removed.favorites, ...syncMetadata.removed?.favorites },
-        watchLater: { ...base.syncMetadata.removed.watchLater, ...syncMetadata.removed?.watchLater },
-        inbox: { ...base.syncMetadata.removed.inbox, ...syncMetadata.removed?.inbox },
-        folders: { ...base.syncMetadata.removed.folders, ...syncMetadata.removed?.folders },
-        tags: { ...base.syncMetadata.removed.tags, ...syncMetadata.removed?.tags }
-      }
+      removed
     }
   }
 }

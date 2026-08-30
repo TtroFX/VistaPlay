@@ -51,7 +51,7 @@ export function createDefaultState(): PersistedAppState {
     syncMetadata: {
       settings: {},
       added: { favorites: {}, watchLater: {}, inbox: {} },
-      removed: { favorites: {}, watchLater: {}, inbox: {}, folders: {}, tags: {} },
+      removed: { favorites: {}, watchLater: {}, inbox: {}, history: {}, folders: {}, tags: {}, savedQueues: {}, smartFolders: {}, notes: {}, channelPreferences: {}, videoPreferences: {}, autoAddRules: {} },
       queueUpdatedAt: new Date(0).toISOString()
     },
     updatedAt: new Date(0).toISOString()
