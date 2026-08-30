@@ -20,6 +20,11 @@ export const featureDependencies: Partial<Record<FeatureKey, FeatureKey>> = {
   aiPromptBuilder: 'chatgpt', aiImport: 'chatgpt', aiSmartSearch: 'chatgpt'
 }
 
+export const featureChildren: Partial<Record<FeatureKey, FeatureKey[]>> = {
+  live: ['liveChat', 'dvr', 'upcoming'],
+  chatgpt: ['aiPromptBuilder', 'aiImport', 'aiSmartSearch']
+}
+
 const enabled: Record<FeatureKey, boolean> = Object.fromEntries(
   Object.keys(featureLabels).map((key) => [key, true]),
 ) as Record<FeatureKey, boolean>
