@@ -37,6 +37,7 @@ interface AppContextValue {
   patchSettings: (patch: Partial<PersistedAppState['settings']>) => void
   setFeature: (key: FeatureKey, value: boolean) => void
   replaceState: (state: PersistedAppState) => void
+  acceptExternalState: (state: PersistedAppState) => void
   upsertVideos: (videos: VideoRef[]) => void
   addSearchHistory: (query: string) => void
   recordProgress: (videoId: string, position: number, duration: number, watchedDelta?: number) => void
@@ -192,15 +193,19 @@ export function AppProvider({ children }: PropsWithChildren) {
   }), [mutate])
 
   const recordSession = useCallback((session: WatchSession) => { void saveWatchSession(session) }, [])
-  const replaceState = useCallback((next: PersistedAppState) => setState(next), [])
+  // UI-level aggregate edits still need the same revision and conflict clocks as
+  // the focused store actions above. Only trusted restore/sync boundaries may
+  // install an already-versioned state without creating another local edit.
+  const replaceState = useCallback((next: PersistedAppState) => mutate(() => next), [mutate])
+  const acceptExternalState = useCallback((next: PersistedAppState) => setState(next), [])
   const feature = useCallback((key: FeatureKey) => isFeatureRuntimeEnabled(state.settings.features, key), [state.settings.features])
 
   const value = useMemo<AppContextValue>(() => ({
     state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, playNext,
     saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, addFolder, toggleFolderVideo,
-    addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, upsertVideos, recordProgress, recordSession, notify,
+    addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, recordProgress, recordSession, notify,
     addSearchHistory, dismissToast: (id) => setToasts((items) => items.filter((item) => item.id !== id))
-  }), [state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, playNext, saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, addFolder, toggleFolderVideo, addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, upsertVideos, addSearchHistory, recordProgress, recordSession, notify])
+  }), [state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, playNext, saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, addFolder, toggleFolderVideo, addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, addSearchHistory, recordProgress, recordSession, notify])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
