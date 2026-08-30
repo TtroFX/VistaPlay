@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultSettings } from '../config/features'
 import type { SearchResult } from '../domain/types'
-import { filterAndSortSearchResults } from './searchRules'
+import { filterAndSortSearchResults, searchLocalVideos } from './searchRules'
 
 const result = (id: string, channelId: string, publishedAt: string, viewCount: number, title = id): SearchResult => ({
   id, type: 'video', title, channelId, video: { videoId: id, title, channelId, publishedAt, viewCount, durationSeconds: 600, liveStatus: 'none' },
@@ -24,5 +24,22 @@ describe('search result rules', () => {
     const newer = result('newer', 'd', '2026-01-02', 10)
     const visible = filterAndSortSearchResults([short, live, older, newer], structuredClone(defaultSettings), { shorts: false, live: false, whitelistOnly: false, sort: 'newest' })
     expect(visible.map((item) => item.id)).toEqual(['newer', 'older'])
+  })
+
+  it('searches cached video metadata with the active API-style filters', () => {
+    const videos = [
+      { videoId: 'one', title: 'TypeScript architecture', channelId: 'allowed', channelTitle: 'Engineering', durationSeconds: 600, publishedAt: '2026-05-02T00:00:00Z', liveStatus: 'none' as const },
+      { videoId: 'two', title: 'TypeScript quick tip #shorts', channelId: 'allowed', durationSeconds: 30, publishedAt: '2026-05-03T00:00:00Z', liveStatus: 'none' as const },
+      { videoId: 'three', title: 'TypeScript architecture', channelId: 'blocked', durationSeconds: 800, publishedAt: '2026-05-03T00:00:00Z', liveStatus: 'none' as const },
+    ]
+    const results = searchLocalVideos(videos, 'typescript architecture', {
+      type: 'video', duration: 'medium', live: 'any', shorts: 'exclude', publishedAfter: '2026-05-01',
+      excludeChannels: ['blocked'], excludeKeywords: [], whitelistOnly: false,
+    })
+    expect(results.map((item) => item.id)).toEqual(['one'])
+  })
+
+  it('does not fabricate channel or playlist results from local video metadata', () => {
+    expect(searchLocalVideos([], 'anything', { type: 'channel', duration: 'any', live: 'any', shorts: 'include', excludeChannels: [], excludeKeywords: [], whitelistOnly: false })).toEqual([])
   })
 })

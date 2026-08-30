@@ -5,7 +5,7 @@ import { EmptyState, LoadingCards } from '../components/EmptyState'
 import { VideoCard } from '../components/VideoCard'
 import type { SearchFilters, SearchResult } from '../domain/types'
 import { parseSmartSearch, type SmartSearchImport } from '../lib/aiBridge'
-import { filterAndSortSearchResults, type SearchSort } from '../lib/searchRules'
+import { filterAndSortSearchResults, searchLocalVideos, type SearchSort } from '../lib/searchRules'
 import { useTemporaryHistory } from '../lib/useTemporaryHistory'
 import { CapabilityError, parseYouTubeInput, searchRemote } from '../lib/youtube'
 import { useApp } from '../store/AppStore'
@@ -99,10 +99,10 @@ export default function SearchPage() {
     if (parsed) { searchRequest.current?.abort(); navigate(parsed.type === 'video' ? `/watch?v=${parsed.id}` : parsed.type === 'channel' ? `/channel/${parsed.id}` : `/playlist/${parsed.id}`); return }
     const { controller, generation } = beginSearchRequest()
     setLoading(true); setError(''); setParams({ q: query.trim() })
+    const effectiveFilters = app.feature('advancedSearch') ? { ...filters } : { ...defaults, type: filters.type }
+    if (!app.feature('shorts')) effectiveFilters.shorts = 'exclude'
+    if (!app.feature('live')) effectiveFilters.live = 'any'
     try {
-      const effectiveFilters = app.feature('advancedSearch') ? { ...filters } : { ...defaults, type: filters.type }
-      if (!app.feature('shorts')) effectiveFilters.shorts = 'exclude'
-      if (!app.feature('live')) effectiveFilters.live = 'any'
       const response = await searchRemote(query.trim(), effectiveFilters, append ? next : undefined, controller.signal)
       if (searchGeneration.current !== generation) return
       const combined = append ? [...results, ...response.items] : response.items
@@ -113,7 +113,15 @@ export default function SearchPage() {
       app.addSearchHistory(query.trim())
       app.upsertVideos(deduped.map((item) => item.video).filter(Boolean) as NonNullable<SearchResult['video']>[])
     } catch (reason) {
-      if (!controller.signal.aborted && searchGeneration.current === generation) setError(reason instanceof CapabilityError ? reason.message : reason instanceof Error ? reason.message : '検索に失敗しました')
+      if (!controller.signal.aborted && searchGeneration.current === generation) {
+        const message = reason instanceof CapabilityError ? reason.message : reason instanceof Error ? reason.message : '検索に失敗しました'
+        if (!append && effectiveFilters.type === 'video') {
+          const local = searchLocalVideos(Object.values(app.state.videos), query.trim(), effectiveFilters)
+          const visible = filterAndSortSearchResults(local, app.state.settings, { shorts: app.feature('shorts'), live: app.feature('live'), whitelistOnly: effectiveFilters.whitelistOnly, sort })
+          setResults(visible); setNext(undefined); app.addSearchHistory(query.trim())
+          setError(visible.length ? `${message} この端末のLibrary metadataから${visible.length}件を表示しています。` : message)
+        } else setError(message)
+      }
     } finally {
       if (searchGeneration.current === generation) setLoading(false)
     }
