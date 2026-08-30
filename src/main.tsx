@@ -24,6 +24,7 @@ const ComparePage = lazy(() => import('./pages/ComparePage'))
 const AIPage = lazy(() => import('./pages/AIPage'))
 const StatisticsPage = lazy(() => import('./pages/StatisticsPage'))
 const DiscoverPage = lazy(() => import('./pages/DiscoverPage'))
+const ShareTargetPage = lazy(() => import('./pages/ShareTargetPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 installRuntimeDiagnostics()
@@ -56,7 +57,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="ai" element={<FeatureGuard feature="chatgpt"><AIPage /></FeatureGuard>} />
             <Route path="statistics" element={<FeatureGuard feature="statistics"><StatisticsPage /></FeatureGuard>} />
             <Route path="discover" element={<DiscoverPage />} />
-            <Route path="share-target" element={<HomePage />} />
+            <Route path="share-target" element={<ShareTargetPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

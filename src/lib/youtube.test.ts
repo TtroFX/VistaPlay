@@ -10,6 +10,9 @@ describe('YouTube parsing', () => {
     expect(parseYouTubeInput('https://www.youtube.com/playlist?list=PL123')?.type).toBe('playlist')
     expect(parseYouTubeInput('https://example.com/watch?v=dQw4w9WgXcQ')).toBeUndefined()
   })
+  it('recognizes a YouTube URL embedded in shared text', () => {
+    expect(parseYouTubeInput('おすすめ動画 https://youtu.be/TESTVIDEO01?t=12')).toEqual({ type: 'video', id: 'TESTVIDEO01' })
+  })
   it('parses ISO duration', () => expect(parseDuration('PT1H2M3S')).toBe(3723))
   it('extracts valid timestamps and rejects impossible or out-of-range values', () => {
     expect(extractTimestamps('intro 1:23 bad 2:99 end 10:00', 300)).toEqual([83])

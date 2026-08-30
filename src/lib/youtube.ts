@@ -22,20 +22,25 @@ export function parseDuration(value?: string): number | undefined {
 export function parseYouTubeInput(value: string): { type: 'video' | 'channel' | 'playlist'; id: string } | undefined {
   const trimmed = value.trim()
   if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return { type: 'video', id: trimmed }
-  try {
-    const url = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`)
-    if (!/(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(url.hostname)) return undefined
-    if (url.hostname.endsWith('youtu.be')) {
-      const id = url.pathname.split('/').filter(Boolean)[0]
-      return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? { type: 'video', id } : undefined
-    }
-    const video = url.searchParams.get('v')
-    if (video && /^[A-Za-z0-9_-]{11}$/.test(video)) return { type: 'video', id: video }
-    const playlist = url.searchParams.get('list')
-    if (playlist) return { type: 'playlist', id: playlist }
-    const channel = url.pathname.match(/^\/channel\/([^/]+)/)?.[1]
-    if (channel) return { type: 'channel', id: channel }
-  } catch { return undefined }
+  const embeddedUrls = trimmed.match(/https?:\/\/[^\s]+/g) ?? []
+  for (const candidate of [trimmed, ...embeddedUrls]) {
+    try {
+      const cleaned = candidate.replace(/[),.;!?]+$/, '')
+      const url = new URL(cleaned.startsWith('http') ? cleaned : `https://${cleaned}`)
+      if (!/(^|\.)youtube\.com$|(^|\.)youtu\.be$/.test(url.hostname)) continue
+      if (url.hostname.endsWith('youtu.be')) {
+        const id = url.pathname.split('/').filter(Boolean)[0]
+        if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) return { type: 'video', id }
+        continue
+      }
+      const video = url.searchParams.get('v')
+      if (video && /^[A-Za-z0-9_-]{11}$/.test(video)) return { type: 'video', id: video }
+      const playlist = url.searchParams.get('list')
+      if (playlist) return { type: 'playlist', id: playlist }
+      const channel = url.pathname.match(/^\/channel\/([^/]+)/)?.[1]
+      if (channel) return { type: 'channel', id: channel }
+    } catch { /* Try the next URL candidate. */ }
+  }
   return undefined
 }
 

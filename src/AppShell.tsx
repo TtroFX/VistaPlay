@@ -4,7 +4,6 @@ import { LoadingCards } from './components/EmptyState'
 import { Sidebar } from './components/Sidebar'
 import { ToastViewport } from './components/ToastViewport'
 import { TopBar } from './components/TopBar'
-import { parseYouTubeInput } from './lib/youtube'
 import { useEdgeSwipeBack } from './lib/useEdgeSwipeBack'
 import { PersistentPlayer } from './player/PersistentPlayer'
 import { playerEngine } from './player/PlayerEngine'
@@ -30,15 +29,6 @@ export function AppShell() {
       document.documentElement.style.setProperty('--accent-contrast', luminance > .42 ? '#111512' : '#ffffff')
     }
   }, [app.state.settings.theme])
-
-  useEffect(() => {
-    const params = new URLSearchParams(location.search)
-    if (location.pathname !== '/share-target') return
-    const shared = params.get('url') || params.get('text') || ''
-    const parsed = parseYouTubeInput(shared)
-    if (parsed?.type === 'video') navigate(`/watch?v=${parsed.id}`, { replace: true })
-    else { navigate('/inbox', { replace: true }); app.notify('共有内容を確認できませんでした', 'error') }
-  }, [location.pathname])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

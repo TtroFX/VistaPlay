@@ -189,6 +189,13 @@ label input:focus, label select:focus, textarea:focus, .inline-form input:focus 
 .speed-preset-strip button.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent); }
 .speed-preset-strip button:disabled { opacity: .38; }
 .speed-preset-settings { flex-wrap: wrap; }
+.share-target-page { min-height: 60vh; display: grid; place-items: center; }
+.share-preview { width: min(720px, 100%); display: grid; gap: 18px; padding: clamp(22px, 4vw, 42px); border: 1px solid var(--border); border-radius: 24px; background: var(--surface); box-shadow: var(--shadow); }
+.share-preview > svg { width: 34px; height: 34px; color: var(--accent); }
+.share-preview h1, .share-preview p { margin: 0; }
+.share-video { display: grid; grid-template-columns: minmax(180px, 42%) 1fr; gap: 20px; align-items: center; }
+.share-video img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 14px; background: var(--surface-2); }
+@media (max-width: 620px) { .share-video { grid-template-columns: 1fr; } }
 .entity-result strong, .entity-result small { display: block; }
 .entity-result small { margin-top: 6px; color: var(--muted); }
 .load-more { display: flex; margin: 30px auto; }
