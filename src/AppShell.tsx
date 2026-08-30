@@ -48,6 +48,16 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', onKey)
   }, [app.player.availableRates, app.player.rate])
 
+  if (!app.hydrated) {
+    return <div className="app-boot" role="status" aria-live="polite">
+      <span className="brand-mark" aria-hidden="true">V</span>
+      <span>
+        <strong>VistaPlay</strong>
+        <small>ローカルデータを復元しています</small>
+      </span>
+    </div>
+  }
+
   const fullPlayer = location.pathname === '/watch'
   const focusMode = fullPlayer && app.state.settings.layout.focusMode
   const cinemaMode = fullPlayer && app.state.settings.layout.cinemaMode

@@ -55,6 +55,13 @@ h2 { margin-bottom: 6px; letter-spacing: -.025em; }
 p { color: var(--muted); line-height: 1.6; }
 svg { width: 20px; height: 20px; flex: 0 0 auto; }
 
+.app-boot { min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 24px; background: var(--bg); animation: boot-in var(--standard) var(--ease) both; }
+.app-boot > .brand-mark { width: 48px; height: 48px; border-radius: 15px; font-size: 20px; }
+.app-boot > span:last-child { display: grid; gap: 3px; }
+.app-boot strong { font-size: 18px; }
+.app-boot small { color: var(--muted); }
+@keyframes boot-in { from { opacity: 0; } }
+
 .app-shell { min-height: 100vh; display: grid; grid-template-columns: 184px minmax(0, 1fr); transition: grid-template-columns var(--panel) var(--ease); }
 .app-shell.sidebar-compact { grid-template-columns: 72px minmax(0, 1fr); }
 .app-shell.sidebar-hidden { grid-template-columns: minmax(0, 1fr); }
