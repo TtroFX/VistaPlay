@@ -121,6 +121,18 @@ export async function cacheGet<T>(key: string): Promise<{ expiresAt: number; val
   return record
 }
 
+export async function cacheGetWithStale<T>(key: string, maxStaleMs: number): Promise<{ expiresAt: number; stale: boolean; value: T } | undefined> {
+  const record = await dbGet<{ expiresAt: number; value: T; accessedAt?: number }>('cache', key)
+  if (!record) return undefined
+  const stale = record.expiresAt <= Date.now()
+  if (stale && Date.now() - record.expiresAt > maxStaleMs) {
+    await dbDelete('cache', key)
+    return undefined
+  }
+  void dbPut('cache', key, { ...record, accessedAt: Date.now() })
+  return { expiresAt: record.expiresAt, stale, value: record.value }
+}
+
 export async function cachePut<T>(key: string, value: T, ttlMs: number): Promise<void> {
   const serialized = JSON.stringify(value)
   await dbPut('cache', key, { expiresAt: Date.now() + ttlMs, accessedAt: Date.now(), size: new TextEncoder().encode(serialized).byteLength, value })

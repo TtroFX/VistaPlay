@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { extractChapters, extractTimestamps, fetchLatestUploads, fetchPlaylist, fetchSubscriptionChannelIds, parseDuration, parseYouTubeInput, parseYouTubeVideoId } from './youtube'
+import { dbPut } from '../data/db'
+import type { SearchFilters } from '../domain/types'
+import { extractChapters, extractTimestamps, fetchLatestUploads, fetchPlaylist, fetchSubscriptionChannelIds, parseDuration, parseYouTubeInput, parseYouTubeVideoId, searchRemote } from './youtube'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+})
 
 describe('YouTube parsing', () => {
   it('recognizes video, channel and playlist links', () => {
@@ -55,5 +60,18 @@ describe('YouTube parsing', () => {
     expect(result.items).toMatchObject([{ videoId: 'PLAYLIST001', title: 'Verified playlist video', durationSeconds: 180 }])
     expect(result.nextPageToken).toBe('page-two')
     expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('uses a recently expired search result when the API is unavailable', async () => {
+    vi.stubEnv('VITE_YOUTUBE_API_KEY', 'test-key')
+    const filters: SearchFilters = { type: 'channel', publishedAfter: '', duration: 'any', live: 'any', shorts: 'include', excludeChannels: [], excludeKeywords: [], whitelistOnly: false }
+    const cacheKey = `search:${JSON.stringify({ query: 'cached query', filters, pageToken: undefined })}`
+    const fallback = { items: [{ type: 'channel' as const, id: 'UC-cached', title: 'Cached channel' }] }
+    await dbPut('cache', cacheKey, { expiresAt: Date.now() - 1000, value: fallback })
+    const fetchMock = vi.fn().mockResolvedValue(new Response('quota unavailable', { status: 403 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(searchRemote('cached query', filters)).resolves.toEqual(fallback)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

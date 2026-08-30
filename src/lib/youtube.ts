@@ -1,15 +1,20 @@
 import type { SearchFilters, SearchResult, VideoRef } from '../domain/types'
-import { cacheGet, cachePut } from '../data/db'
+import { cacheGet, cacheGetWithStale, cachePut } from '../data/db'
 import { recordDiagnostic } from './diagnostics'
 
 const API = 'https://www.googleapis.com/youtube/v3'
 const SEARCH_TTL = 6 * 60 * 60 * 1000
+const SEARCH_STALE_FALLBACK = 7 * 24 * 60 * 60 * 1000
 const METADATA_TTL = 24 * 60 * 60 * 1000
 const LIVE_METADATA_TTL = 60 * 1000
 const COMMENTS_TTL = 10 * 60 * 1000
 
 export class CapabilityError extends Error {
   constructor(public readonly capability: string, message: string) { super(message) }
+}
+
+class YouTubeResponseError extends Error {
+  constructor(public readonly status: number, message: string) { super(message) }
 }
 
 export function parseDuration(value?: string): number | undefined {
@@ -61,10 +66,11 @@ async function apiFetch<T>(path: string, params: Record<string, string>, signal?
       const response = await fetch(url, { signal, headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined })
       if (response.ok) return await response.json() as T
       const body = await response.text()
-      if (response.status !== 429 && response.status < 500) throw new Error(`YouTube API ${response.status}: ${body.slice(0, 240)}`)
+      if (response.status !== 429 && response.status < 500) throw new YouTubeResponseError(response.status, `YouTube API ${response.status}: ${body.slice(0, 240)}`)
       lastError = new Error(`YouTube API ${response.status}`)
     } catch (error) {
       if (signal?.aborted) throw error
+      if (error instanceof YouTubeResponseError) throw error
       lastError = error instanceof Error ? error : new Error('YouTube request failed')
     }
     if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 300 * 2 ** attempt + Math.random() * 180))
@@ -145,39 +151,45 @@ export async function fetchLatestUploads(channelIds: string[], accessToken?: str
 
 export async function searchRemote(query: string, filters: SearchFilters, pageToken?: string, signal?: AbortSignal): Promise<{ items: SearchResult[]; nextPageToken?: string }> {
   const cacheKey = `search:${JSON.stringify({ query, filters, pageToken })}`
-  const cached = await cacheGet<{ items: SearchResult[]; nextPageToken?: string }>(cacheKey)
-  if (cached) return cached.value
-  const params: Record<string, string> = { part: 'snippet', q: query, type: filters.type, maxResults: '25', safeSearch: 'moderate' }
-  if (pageToken) params.pageToken = pageToken
-  if (filters.publishedAfter) params.publishedAfter = new Date(filters.publishedAfter).toISOString()
-  if (filters.live !== 'any') params.eventType = filters.live
-  if (filters.type === 'video' && filters.duration !== 'any') params.videoDuration = filters.duration
-  const search = await apiFetch<{ items?: Array<{ id: { videoId?: string; channelId?: string; playlistId?: string }; snippet?: { title?: string; description?: string; channelId?: string; channelTitle?: string; thumbnails?: { medium?: { url: string } } } }>; nextPageToken?: string }>('search', params, signal)
-  const ids = (search.items ?? []).map((item) => item.id.videoId).filter(Boolean) as string[]
-  const verified = filters.type === 'video' ? await verifyVideoIds(ids, signal) : { valid: [], invalid: [] }
-  const excludedChannels = new Set(filters.excludeChannels.map((value) => value.toLowerCase()))
-  const excludedWords = filters.excludeKeywords.map((value) => value.toLowerCase()).filter(Boolean)
-  let videos = verified.valid.filter((video) => !excludedChannels.has((video.channelId ?? '').toLowerCase()) && !excludedWords.some((word) => `${video.title} ${video.description ?? ''}`.toLowerCase().includes(word)))
-  if (filters.shorts !== 'include') {
-    videos = videos.filter((video) => {
-      const likelyShort = /#shorts\b/i.test(`${video.title} ${video.description ?? ''}`) || (video.durationSeconds !== undefined && video.durationSeconds <= 60)
-      return filters.shorts === 'only' ? likelyShort : !likelyShort
-    })
+  const cached = await cacheGetWithStale<{ items: SearchResult[]; nextPageToken?: string }>(cacheKey, SEARCH_STALE_FALLBACK)
+  if (cached && !cached.stale) return cached.value
+  try {
+    const params: Record<string, string> = { part: 'snippet', q: query, type: filters.type, maxResults: '25', safeSearch: 'moderate' }
+    if (pageToken) params.pageToken = pageToken
+    if (filters.publishedAfter) params.publishedAfter = new Date(filters.publishedAfter).toISOString()
+    if (filters.live !== 'any') params.eventType = filters.live
+    if (filters.type === 'video' && filters.duration !== 'any') params.videoDuration = filters.duration
+    const search = await apiFetch<{ items?: Array<{ id: { videoId?: string; channelId?: string; playlistId?: string }; snippet?: { title?: string; description?: string; channelId?: string; channelTitle?: string; thumbnails?: { medium?: { url: string } } } }>; nextPageToken?: string }>('search', params, signal)
+    const ids = (search.items ?? []).map((item) => item.id.videoId).filter(Boolean) as string[]
+    const verified = filters.type === 'video' ? await verifyVideoIds(ids, signal) : { valid: [], invalid: [] }
+    const excludedChannels = new Set(filters.excludeChannels.map((value) => value.toLowerCase()))
+    const excludedWords = filters.excludeKeywords.map((value) => value.toLowerCase()).filter(Boolean)
+    let videos = verified.valid.filter((video) => !excludedChannels.has((video.channelId ?? '').toLowerCase()) && !excludedWords.some((word) => `${video.title} ${video.description ?? ''}`.toLowerCase().includes(word)))
+    if (filters.shorts !== 'include') {
+      videos = videos.filter((video) => {
+        const likelyShort = /#shorts\b/i.test(`${video.title} ${video.description ?? ''}`) || (video.durationSeconds !== undefined && video.durationSeconds <= 60)
+        return filters.shorts === 'only' ? likelyShort : !likelyShort
+      })
+    }
+    const items: SearchResult[] = filters.type === 'video'
+      ? videos.map((video) => ({ type: 'video', id: video.videoId, title: video.title, description: video.description, thumbnail: video.thumbnail, channelTitle: video.channelTitle, video }))
+      : (search.items ?? []).map((item) => ({
+          type: filters.type,
+          id: filters.type === 'channel' ? item.id.channelId ?? '' : item.id.playlistId ?? '',
+          title: item.snippet?.title ?? (filters.type === 'channel' ? 'Channel' : 'Playlist'),
+          description: item.snippet?.description,
+          thumbnail: item.snippet?.thumbnails?.medium?.url,
+          channelId: filters.type === 'channel' ? item.id.channelId : item.snippet?.channelId,
+          channelTitle: item.snippet?.channelTitle
+        })).filter((item) => item.id && !excludedWords.some((word) => `${item.title} ${item.description ?? ''}`.toLowerCase().includes(word)))
+    const value = { items, nextPageToken: search.nextPageToken }
+    await cachePut(cacheKey, value, SEARCH_TTL)
+    return value
+  } catch (error) {
+    if (signal?.aborted || !cached) throw error
+    recordDiagnostic('api', 'YouTube search unavailable; using a recently expired local result')
+    return cached.value
   }
-  const items: SearchResult[] = filters.type === 'video'
-    ? videos.map((video) => ({ type: 'video', id: video.videoId, title: video.title, description: video.description, thumbnail: video.thumbnail, channelTitle: video.channelTitle, video }))
-    : (search.items ?? []).map((item) => ({
-        type: filters.type,
-        id: filters.type === 'channel' ? item.id.channelId ?? '' : item.id.playlistId ?? '',
-        title: item.snippet?.title ?? (filters.type === 'channel' ? 'Channel' : 'Playlist'),
-        description: item.snippet?.description,
-        thumbnail: item.snippet?.thumbnails?.medium?.url,
-        channelId: filters.type === 'channel' ? item.id.channelId : item.snippet?.channelId,
-        channelTitle: item.snippet?.channelTitle
-      })).filter((item) => item.id && !excludedWords.some((word) => `${item.title} ${item.description ?? ''}`.toLowerCase().includes(word)))
-  const value = { items, nextPageToken: search.nextPageToken }
-  await cachePut(cacheKey, value, SEARCH_TTL)
-  return value
 }
 
 export async function searchVideos(query: string, filters: SearchFilters, pageToken?: string, signal?: AbortSignal): Promise<{ items: VideoRef[]; nextPageToken?: string }> {
