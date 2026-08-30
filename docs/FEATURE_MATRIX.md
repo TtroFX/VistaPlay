@@ -9,7 +9,7 @@
 | Navigation | Sidebar modes, deep links, stateful Search restore, docked mini player | Inbox/AI/Compare/Statistics routes guarded by features |
 | Library | Favorites, Watch Later, folders, tags, Smart Folders, archive, notes | Folder max depth enforced; Smart Folders are computed, not manually populated |
 | Queue | FIFO play-next, dedupe, reorder, shuffle, snapshots replace/append | Saved Queue hidden when disabled; max 100 |
-| Channel / Playlist | Metadata, uploads, Shorts heuristic, Live tab, local preferences; playlist read-only | YouTube API capability required |
+| Channel / Playlist | Metadata, uploads, Shorts heuristic, Live tab, playback/Home/Shorts/queue local preferences; playlist read-only | YouTube API capability required; Shorts preference UI is removed when Shorts is disabled |
 | Comments | 20 initial, explicit additional pages, 200/session max, relevance/newest, fetched-text search, collapsed replies, timestamp seeking | Network request occurs only while enabled/opened |
 | Live | Official playback and official live-chat embed; normal Watch layout | Live tabs/requests removed when disabled; DVR left to Player capability |
 | Sponsor | SponsorBlock public read-only segments; manual external skip action | No request when disabled; auto-skip default/off |

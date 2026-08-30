@@ -2,7 +2,7 @@ import { ChevronUp, Gauge, Maximize2, Pause, Play, Repeat, RotateCcw, RotateCw, 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { WatchSession } from '../domain/types'
-import { nextPlaybackRate, resolvePlaybackEndAction } from '../lib/playerMath'
+import { nextPlaybackRate, resolvePlaybackEndAction, resolvePlaybackRate } from '../lib/playerMath'
 import { formatDuration } from '../lib/time'
 import { useApp } from '../store/AppStore'
 import { playerEngine } from './PlayerEngine'
@@ -44,6 +44,7 @@ export function PersistentPlayer() {
       ?? app.state.channelPreferences.find((item) => item.channelId === current.channelId)?.playbackRate
       ?? app.state.settings.playback.globalRate
   }, [app.state.channelPreferences, app.state.settings.playback.globalRate, app.state.videoPreferences, current])
+  const availableRateKey = app.player.availableRates.join(',')
 
   useEffect(() => {
     if (!hostRef.current || !current) return
@@ -51,6 +52,12 @@ export function PersistentPlayer() {
     void playerEngine.mount(hostRef.current, current.videoId, position, preferredRate)
     setA(undefined); setB(undefined); setRepeat(false)
   }, [current?.videoId])
+
+  useEffect(() => {
+    if (!current || !app.player.ready) return
+    const resolved = resolvePlaybackRate(preferredRate, app.player.availableRates)
+    if (resolved !== app.player.rate) playerEngine.setRate(resolved)
+  }, [current?.videoId, preferredRate, app.player.ready, availableRateKey])
 
   useEffect(() => {
     const active = session.current
