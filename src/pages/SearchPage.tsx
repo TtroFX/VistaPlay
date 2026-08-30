@@ -21,6 +21,7 @@ export default function SearchPage() {
     const raw = sessionStorage.getItem('vistaplay-smart-search')
     if (!raw) return null
     sessionStorage.removeItem('vistaplay-smart-search')
+    if (!app.feature('aiSmartSearch')) return null
     try { return parseSmartSearch(raw) } catch { return null }
   })
   const restored = useRef<RestoredSearch | null>(null)
