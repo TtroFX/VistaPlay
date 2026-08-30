@@ -74,6 +74,7 @@ export function AppProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     loadAppState().then((loaded) => {
+      latestState.current = loaded
       setState(loaded)
       if (loaded.lastPlayer?.videoId && loaded.videos[loaded.lastPlayer.videoId]) setCurrentVideo(loaded.videos[loaded.lastPlayer.videoId])
       setHydrated(true)
@@ -118,7 +119,9 @@ export function AppProvider({ children }: PropsWithChildren) {
     setState((current) => {
       const now = new Date().toISOString()
       const next = updater(current)
-      return { ...next, syncMetadata: stampSyncMetadata(current, next, now), revision: current.revision + 1, updatedAt: now }
+      const stamped = { ...next, syncMetadata: stampSyncMetadata(current, next, now), revision: current.revision + 1, updatedAt: now }
+      latestState.current = stamped
+      return stamped
     })
   }, [])
 
@@ -296,12 +299,18 @@ export function AppProvider({ children }: PropsWithChildren) {
     return { ...current, history: { ...current.history, [videoId]: progress }, inbox: watchedSeconds >= 30 ? current.inbox.filter((id) => id !== videoId) : current.inbox, lastPlayer: { videoId, position: progress.position, updatedAt: progress.updatedAt } }
   }), [mutate])
 
-  const recordSession = useCallback((session: WatchSession) => { void saveWatchSession(session) }, [])
+  const recordSession = useCallback((session: WatchSession) => {
+    void saveWatchSession(session).catch(() => recordDiagnostic('runtime', 'Watch session save failed'))
+  }, [])
   // UI-level aggregate edits still need the same revision and conflict clocks as
   // the focused store actions above. Only trusted restore/sync boundaries may
   // install an already-versioned state without creating another local edit.
   const replaceState = useCallback((next: PersistedAppState) => mutate(() => next), [mutate])
-  const acceptExternalState = useCallback((next: PersistedAppState, reconcile = false) => setState((current) => reconcile ? mergeCloudStates(current, next) : next), [])
+  const acceptExternalState = useCallback((next: PersistedAppState, reconcile = false) => setState((current) => {
+    const accepted = reconcile ? mergeCloudStates(current, next) : next
+    latestState.current = accepted
+    return accepted
+  }), [])
   const feature = useCallback((key: FeatureKey) => isFeatureRuntimeEnabled(state.settings.features, key), [state.settings.features])
 
   const value = useMemo<AppContextValue>(() => ({
