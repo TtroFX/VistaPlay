@@ -50,12 +50,15 @@ export function parseSmartSearch(input: string): SmartSearchImport {
 
 function parseSmartSearchValue(value: unknown): SmartSearchImport {
   if (!isRecord(value) || value.version !== 1 || value.type !== 'youtube_search') throw new Error('Invalid or unsupported smart search document')
-  if (!Array.isArray(value.searches) || value.searches.length > 10) throw new Error('searches must contain at most 10 queries')
+  if (!Array.isArray(value.searches) || value.searches.length < 1 || value.searches.length > 10) throw new Error('searches must contain 1 to 10 queries')
   const warnings: string[] = []
+  for (const key of Object.keys(value)) if (!['version', 'type', 'searches'].includes(key)) warnings.push(`Ignored unknown field: ${key}`)
   const searches = value.searches.map((raw, index) => {
     if (!isRecord(raw) || typeof raw.query !== 'string' || !raw.query.trim()) throw new Error(`searches[${index}].query is invalid`)
+    for (const key of Object.keys(raw)) if (!['query', 'filters'].includes(key)) warnings.push(`Ignored unknown search field: ${key}`)
+    if (isRecord(raw.filters)) for (const key of Object.keys(raw.filters)) if (!['shorts', 'live'].includes(key)) warnings.push(`Ignored unknown filter field: ${key}`)
     const filters = isRecord(raw.filters) ? { shorts: typeof raw.filters.shorts === 'boolean' ? raw.filters.shorts : undefined, live: typeof raw.filters.live === 'boolean' ? raw.filters.live : undefined } : undefined
-    return { query: raw.query, filters }
+    return { query: raw.query.trim(), filters }
   })
   return { version: 1, type: 'youtube_search', searches, warnings }
 }

@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { EmptyState, LoadingCards } from '../components/EmptyState'
 import { VideoCard } from '../components/VideoCard'
 import type { SearchFilters, SearchResult } from '../domain/types'
+import { parseSmartSearch, type SmartSearchImport } from '../lib/aiBridge'
 import { filterAndSortSearchResults, type SearchSort } from '../lib/searchRules'
 import { CapabilityError, parseYouTubeInput, searchRemote } from '../lib/youtube'
 import { useApp } from '../store/AppStore'
@@ -16,22 +17,62 @@ export default function SearchPage() {
   const app = useApp()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const [smartSearch] = useState<SmartSearchImport | null>(() => {
+    const raw = sessionStorage.getItem('vistaplay-smart-search')
+    if (!raw) return null
+    sessionStorage.removeItem('vistaplay-smart-search')
+    try { return parseSmartSearch(raw) } catch { return null }
+  })
   const restored = useRef<RestoredSearch | null>(null)
   if (!restored.current) { try { restored.current = JSON.parse(sessionStorage.getItem(RESTORE_KEY) ?? 'null') } catch { restored.current = null } }
   const requestedQuery = params.get('q')
-  const canRestore = !requestedQuery || requestedQuery === restored.current?.query
-  const [query, setQuery] = useState(requestedQuery ?? restored.current?.query ?? '')
+  const canRestore = !smartSearch && (!requestedQuery || requestedQuery === restored.current?.query)
+  const [query, setQuery] = useState(smartSearch?.searches[0].query ?? requestedQuery ?? restored.current?.query ?? '')
   const [filters, setFilters] = useState<SearchFilters>(canRestore ? restored.current?.filters ?? defaults : defaults)
   const [results, setResults] = useState<SearchResult[]>(canRestore ? restored.current?.results ?? [] : [])
   const [next, setNext] = useState<string | undefined>(canRestore ? restored.current?.next : undefined)
   const [sort, setSort] = useState<SearchSort>(canRestore ? restored.current?.sort ?? 'relevance' : 'relevance')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [smartSummary, setSmartSummary] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: 0 })
   latest.current = { query, filters, results, next, sort, scroll: window.scrollY }
   useEffect(() => { window.scrollTo(0, canRestore ? restored.current?.scroll ?? 0 : 0); return () => sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: window.scrollY })) }, [])
-  useEffect(() => { if (params.get('q') && !results.length) void runSearch(false) }, [])
+  useEffect(() => { if (smartSearch) void runSmartSearch(smartSearch); else if (params.get('q') && !results.length) void runSearch(false) }, [])
+
+  async function runSmartSearch(document: SmartSearchImport) {
+    setLoading(true); setError(''); setNext(undefined); setParams({ q: document.searches[0].query })
+    const combined: SearchResult[] = []
+    let failures = 0
+    let firstFailure = ''
+    for (let offset = 0; offset < document.searches.length; offset += 3) {
+      const outcomes = await Promise.all(document.searches.slice(offset, offset + 3).map(async (search) => {
+        const shortsAllowed = app.feature('shorts') && search.filters?.shorts !== false
+        const liveAllowed = app.feature('live') && search.filters?.live !== false
+        const smartFilters: SearchFilters = { ...defaults, shorts: shortsAllowed ? 'include' : 'exclude' }
+        try {
+          const response = await searchRemote(search.query, smartFilters)
+          return { search, items: filterAndSortSearchResults(response.items, app.state.settings, { shorts: shortsAllowed, live: liveAllowed, whitelistOnly: false, sort }) }
+        } catch (reason) { return { search, reason } }
+      }))
+      for (const outcome of outcomes) {
+        if (outcome.items !== undefined) {
+          combined.push(...outcome.items)
+          app.addSearchHistory(outcome.search.query)
+        } else {
+          failures += 1
+          if (!firstFailure) firstFailure = outcome.reason instanceof Error ? outcome.reason.message : 'Smart Search query failed'
+        }
+      }
+    }
+    const deduped = [...new Map(combined.map((item) => [`${item.type}:${item.id}`, item])).values()]
+    setResults(deduped)
+    app.upsertVideos(deduped.map((item) => item.video).filter(Boolean) as NonNullable<SearchResult['video']>[])
+    setSmartSummary(`${document.searches.length} queriesから${deduped.length}件を統合${failures ? `（${failures}件失敗）` : ''}`)
+    if (!deduped.length && failures) setError(firstFailure)
+    setLoading(false)
+  }
 
   async function runSearch(append: boolean, event?: FormEvent) {
     event?.preventDefault(); if (!query.trim()) return
@@ -78,6 +119,7 @@ export default function SearchPage() {
         <label className="check-label"><input type="checkbox" checked={filters.whitelistOnly} onChange={(e) => setFilters({ ...filters, whitelistOnly: e.target.checked })} />Whitelist-only</label>
       </div>}
     </form>
+    {smartSummary && <div className="import-status"><Bot /><span>Smart Search: {smartSummary}</span></div>}
     {!results.length && app.state.searchHistory.length > 0 && <div className="filter-bar search-history"><span>最近の検索</span>{app.state.searchHistory.slice(0, 8).map((item) => <button className="filter-chip" key={item} onClick={() => setQuery(item)}><Search />{item}</button>)}<button className="text-button" onClick={() => app.replaceState({ ...app.state, searchHistory: [], revision: app.state.revision + 1, updatedAt: new Date().toISOString() })}>履歴を消去</button></div>}
     {error && <div className="capability-notice"><Filter /><div><strong>検索Capabilityを利用できません</strong><p>{error}</p><span>URL / 11文字Video IDからの直接再生とlocal Library検索は利用できます。</span></div></div>}
     {loading && !results.length ? <LoadingCards /> : results.length ? <>
