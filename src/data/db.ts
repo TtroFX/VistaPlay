@@ -134,8 +134,20 @@ export async function cacheGetWithStale<T>(key: string, maxStaleMs: number): Pro
 }
 
 export async function cachePut<T>(key: string, value: T, ttlMs: number): Promise<void> {
-  const serialized = JSON.stringify(value)
-  await dbPut('cache', key, { expiresAt: Date.now() + ttlMs, accessedAt: Date.now(), size: new TextEncoder().encode(serialized).byteLength, value })
+  await cachePutMany([{ key, value, ttlMs }])
+}
+
+export async function cachePutMany(entries: Array<{ key: string; value: unknown; ttlMs: number }>): Promise<void> {
+  if (!entries.length) return
+  const db = await openDatabase()
+  const tx = db.transaction('cache', 'readwrite')
+  const store = tx.objectStore('cache')
+  const now = Date.now()
+  for (const entry of entries) {
+    const serialized = JSON.stringify(entry.value)
+    store.put({ expiresAt: now + entry.ttlMs, accessedAt: now, size: new TextEncoder().encode(serialized).byteLength, value: entry.value }, entry.key)
+  }
+  await transactionDone(tx)
   const appState = await dbGet<{ settings?: { cacheLimitMb?: number } }>('settings', 'app-state-v3')
   await enforceCacheLimit(appState?.settings?.cacheLimitMb ?? 250)
 }

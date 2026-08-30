@@ -1,5 +1,5 @@
 import type { SearchFilters, SearchResult, VideoRef } from '../domain/types'
-import { cacheGet, cacheGetWithStale, cachePut } from '../data/db'
+import { cacheGet, cacheGetWithStale, cachePut, cachePutMany } from '../data/db'
 import { recordDiagnostic } from './diagnostics'
 
 const API = 'https://www.googleapis.com/youtube/v3'
@@ -15,6 +15,26 @@ export class CapabilityError extends Error {
 
 class YouTubeResponseError extends Error {
   constructor(public readonly status: number, message: string) { super(message) }
+}
+
+async function storeCache<T>(key: string, value: T, ttlMs: number): Promise<void> {
+  try {
+    await cachePut(key, value, ttlMs)
+  } catch {
+    recordDiagnostic('runtime', 'Local API cache write failed; remote result remains available')
+  }
+}
+
+async function storeVideoCache(videos: VideoRef[]): Promise<void> {
+  try {
+    await cachePutMany(videos.map((video) => ({
+      key: `video:${video.videoId}`,
+      value: video,
+      ttlMs: video.liveStatus === 'live' || video.liveStatus === 'upcoming' ? LIVE_METADATA_TTL : METADATA_TTL,
+    })))
+  } catch {
+    recordDiagnostic('runtime', 'Local video cache write failed; remote metadata remains available')
+  }
 }
 
 export function parseDuration(value?: string): number | undefined {
@@ -107,10 +127,11 @@ export async function verifyVideoIds(ids: string[], signal?: AbortSignal, access
   const missing = unique.filter((id) => !metadata.has(id))
   if (missing.length) {
     const data = await apiFetch<{ items?: VideoApiItem[] }>('videos', { part: 'snippet,contentDetails,statistics,liveStreamingDetails', id: missing.join(',') }, signal, accessToken)
-    for (const item of (data.items ?? []).map(mapVideo)) {
+    const fetched = (data.items ?? []).map(mapVideo)
+    for (const item of fetched) {
       metadata.set(item.videoId, item)
-      await cachePut(`video:${item.videoId}`, item, item.liveStatus === 'live' || item.liveStatus === 'upcoming' ? LIVE_METADATA_TTL : METADATA_TTL)
     }
+    await storeVideoCache(fetched)
   }
   const valid = unique.map((id) => metadata.get(id)).filter(Boolean) as VideoRef[]
   const found = new Set(valid.map((item) => item.videoId))
@@ -183,7 +204,7 @@ export async function searchRemote(query: string, filters: SearchFilters, pageTo
           channelTitle: item.snippet?.channelTitle
         })).filter((item) => item.id && !excludedWords.some((word) => `${item.title} ${item.description ?? ''}`.toLowerCase().includes(word)))
     const value = { items, nextPageToken: search.nextPageToken }
-    await cachePut(cacheKey, value, SEARCH_TTL)
+    await storeCache(cacheKey, value, SEARCH_TTL)
     return value
   } catch (error) {
     if (signal?.aborted || !cached) throw error
@@ -242,7 +263,7 @@ export async function fetchComments(videoId: string, pageToken?: string, order: 
   const params: Record<string, string> = { part: 'snippet,replies', videoId, maxResults: '20', order, textFormat: 'plainText' }
   if (pageToken) params.pageToken = pageToken
   const value = await apiFetch<YouTubeCommentsResponse>('commentThreads', params, signal)
-  await cachePut(cacheKey, value, COMMENTS_TTL)
+  await storeCache(cacheKey, value, COMMENTS_TTL)
   return value
 }
 
@@ -255,7 +276,7 @@ export async function fetchChannel(channelId: string, signal?: AbortSignal): Pro
   const item = data.items?.[0]
   if (!item) throw new Error('Channel is unavailable')
   const value = { channelId: item.id, title: item.snippet?.title ?? 'Channel', description: item.snippet?.description, thumbnail: item.snippet?.thumbnails?.high?.url ?? item.snippet?.thumbnails?.medium?.url, subscriberCount: item.statistics?.subscriberCount ? Number(item.statistics.subscriberCount) : undefined, videoCount: item.statistics?.videoCount ? Number(item.statistics.videoCount) : undefined }
-  await cachePut(`channel:${channelId}`, value, METADATA_TTL)
+  await storeCache(`channel:${channelId}`, value, METADATA_TTL)
   return value
 }
 
@@ -297,7 +318,7 @@ export async function fetchPlaylistDetails(playlistId: string, signal?: AbortSig
     channelTitle: item.snippet?.channelTitle,
     itemCount: item.contentDetails?.itemCount,
   }
-  await cachePut(cacheKey, value, METADATA_TTL)
+  await storeCache(cacheKey, value, METADATA_TTL)
   return value
 }
 
