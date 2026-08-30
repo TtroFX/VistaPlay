@@ -24,7 +24,8 @@ export default function WatchPage() {
   const [sponsors, setSponsors] = useState<SponsorSegment[]>([]); const [descriptionOpen, setDescriptionOpen] = useState(false)
   const video = videoId ? app.state.videos[videoId] ?? (app.currentVideo?.videoId === videoId ? app.currentVideo : undefined) : undefined
   const chapters = useMemo(() => extractChapters(video?.description ?? '', video?.durationSeconds), [video?.description, video?.durationSeconds])
-  const tabs = ([['queue', 'Queue', ListVideo], ...(app.feature('chapters') ? [['chapters', 'Chapters', FileText]] : []), ...(app.feature('comments') ? [['comments', 'Comments', MessageCircle]] : []), ...(app.feature('captions') ? [['captions', 'Captions', Captions]] : []), ...(app.feature('live') && video?.liveStatus === 'live' ? [['livechat', 'Live Chat', MessageCircle]] : []), ['overview', 'Overview', Sparkles]] as Array<[WatchTab, string, typeof ListVideo]>)
+  const tabs = ([['queue', 'Queue', ListVideo], ...(app.feature('chapters') ? [['chapters', 'Chapters', FileText]] : []), ...(app.feature('comments') ? [['comments', 'Comments', MessageCircle]] : []), ...(app.feature('captions') ? [['captions', 'Captions', Captions]] : []), ...(app.feature('liveChat') && video?.liveStatus === 'live' ? [['livechat', 'Live Chat', MessageCircle]] : []), ['overview', 'Overview', Sparkles]] as Array<[WatchTab, string, typeof ListVideo]>)
+  const availableTabKeys = tabs.map(([key]) => key).join(',')
 
   useEffect(() => {
     if (!videoId || videoId.length !== 11) return
@@ -44,6 +45,7 @@ export default function WatchPage() {
   }, [app.feature, videoId])
 
   useEffect(() => { if (tab === 'comments' && !comments.length) void loadComments(false) }, [tab, commentOrder])
+  useEffect(() => { if (!tabs.some(([key]) => key === tab)) setTab('queue') }, [availableTabKeys, tab])
 
   async function loadComments(append: boolean) {
     if (!videoId || commentLoading || comments.length >= 200) return
@@ -73,7 +75,7 @@ export default function WatchPage() {
         {shown.description && <div className={`description-panel ${descriptionOpen ? 'open' : ''}`}><p>{shown.description}</p><button onClick={() => setDescriptionOpen((value) => !value)}>{descriptionOpen ? '閉じる' : 'もっと見る'}<ChevronDown /></button></div>}
       </section>
       {!app.state.settings.layout.focusMode && <aside className="watch-pane" style={{ width: app.state.settings.layout.rightPaneWidth }}><div className="pane-tabs" role="tablist">{tabs.map(([key, label, Icon]) => <button role="tab" aria-selected={tab === key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)} key={key}><Icon />{label}</button>)}</div><div className="pane-content">
-        {tab === 'queue' && <div className="pane-queue">{app.state.queue.length ? app.state.queue.map((item, index) => <button key={item.id} onClick={() => { app.playVideo(item.video); navigate(`/watch?v=${item.video.videoId}`) }}><span>{index + 1}</span><img src={item.video.thumbnail} alt="" /><strong>{item.video.title}</strong></button>) : <p className="pane-empty">Queueは空です</p>}</div>}
+        {tab === 'queue' && <div className="pane-queue">{app.state.queue.length ? app.state.queue.map((item, index) => <button key={item.id} onClick={() => { app.playQueueItem(item.id); navigate(`/watch?v=${item.video.videoId}`) }}><span>{index + 1}</span><img src={item.video.thumbnail} alt="" /><strong>{item.video.title}</strong></button>) : <p className="pane-empty">Queueは空です</p>}</div>}
         {tab === 'chapters' && (chapters.length ? <div className="chapter-list">{chapters.map((chapter) => <button key={chapter.start} onClick={() => playerEngine.seekTo(chapter.start)}><span>{formatDuration(chapter.start)}</span><strong>{chapter.title}</strong></button>)}</div> : <p className="pane-empty">DescriptionからChapterを検出できませんでした。</p>)}
         {tab === 'captions' && <div className="capability-copy"><Captions /><h3>YouTube標準Caption</h3><p>字幕はPlayer内の正式Caption操作から利用できます。iframe字幕のscrapingは行いません。</p></div>}
         {tab === 'livechat' && <iframe className="live-chat-frame" title="YouTube Live Chat" src={`https://www.youtube.com/live_chat?v=${videoId}&embed_domain=${window.location.hostname}`} />}

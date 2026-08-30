@@ -185,9 +185,11 @@ export function PersistentPlayer() {
         </>}
         <span className="control-spacer" />
         <button className="icon-button" onClick={() => playerEngine.toggleMute()} aria-label="ミュート切替">{app.player.muted ? <VolumeX /> : <Volume2 />}</button>
+        {full && <label className="volume-control"><span className="sr-only">音量</span><input type="range" min="0" max="100" step="1" value={app.player.volume} onChange={(event) => playerEngine.setVolume(Number(event.target.value))} aria-label="音量" /><span>{Math.round(app.player.volume)}%</span></label>}
         {full ? <button className="icon-button" onClick={() => void frameRef.current?.requestFullscreen()} aria-label="全画面"><Maximize2 /></button> : <button className="icon-button" onClick={() => navigate(`/watch?v=${current.videoId}`)} aria-label="展開"><ChevronUp /></button>}
         <button className="icon-button danger-hover" onClick={() => { finishSession(); app.closePlayer() }} aria-label="プレイヤーを閉じる"><X /></button>
       </div>
+      {full && <div className="speed-preset-strip" role="group" aria-label="再生速度プリセット">{app.state.settings.playback.speedPresets.map((rate) => <button type="button" className={app.player.rate === rate ? 'active' : ''} aria-pressed={app.player.rate === rate} disabled={!app.player.availableRates.includes(rate)} onClick={() => playerEngine.setRate(rate)} key={rate}>{rate}x</button>)}</div>}
     </div>
   </section>
 }

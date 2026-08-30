@@ -50,6 +50,7 @@ export function AppShell() {
       else if (event.key === 'ArrowLeft') playerEngine.seekBy(-5)
       else if (event.key === 'ArrowRight') playerEngine.seekBy(5)
       else if (event.key.toLowerCase() === 'm') playerEngine.toggleMute()
+      else if (event.key.toLowerCase() === 'f') { const frame = document.querySelector<HTMLElement>('.player-frame'); if (frame && !document.fullscreenElement) void frame.requestFullscreen() }
       else if (event.shiftKey && event.key === ',') { const rates = app.player.availableRates; const index = rates.indexOf(app.player.rate); playerEngine.setRate(rates[Math.max(0, index - 1)] ?? app.player.rate) }
       else if (event.shiftKey && event.key === '.') { const rates = app.player.availableRates; const index = rates.indexOf(app.player.rate); playerEngine.setRate(rates[Math.min(rates.length - 1, index + 1)] ?? app.player.rate) }
     }

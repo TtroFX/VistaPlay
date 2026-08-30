@@ -182,6 +182,13 @@ label input:focus, label select:focus, textarea:focus, .inline-form input:focus 
 .entity-result { min-height: 96px; display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 16px; padding: 10px; border: 1px solid var(--border); border-radius: 15px; background: var(--surface); text-align: left; }
 .entity-result img, .entity-placeholder { width: 110px; height: 74px; object-fit: cover; border-radius: 10px; background: var(--surface-2); }
 .entity-placeholder { display: grid; place-items: center; }
+.volume-control { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--muted); font-size: .78rem; }
+.volume-control input { width: clamp(80px, 12vw, 140px); accent-color: var(--accent); }
+.speed-preset-strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 4px; }
+.speed-preset-strip button { min-width: 48px; min-height: 36px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); }
+.speed-preset-strip button.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent); }
+.speed-preset-strip button:disabled { opacity: .38; }
+.speed-preset-settings { flex-wrap: wrap; }
 .entity-result strong, .entity-result small { display: block; }
 .entity-result small { margin-top: 6px; color: var(--muted); }
 .load-more { display: flex; margin: 30px auto; }
