@@ -44,6 +44,11 @@ export function parseYouTubeInput(value: string): { type: 'video' | 'channel' | 
   return undefined
 }
 
+export function parseYouTubeVideoId(value: string): string | undefined {
+  const parsed = parseYouTubeInput(value)
+  return parsed?.type === 'video' ? parsed.id : undefined
+}
+
 async function apiFetch<T>(path: string, params: Record<string, string>, signal?: AbortSignal, accessToken?: string): Promise<T> {
   const key = import.meta.env.VITE_YOUTUBE_API_KEY
   if (!key && !accessToken) throw new CapabilityError('youtube-api', 'YouTube Data API key is not configured. Direct video URLs remain available.')

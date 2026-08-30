@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { extractChapters, extractTimestamps, fetchLatestUploads, fetchPlaylist, fetchSubscriptionChannelIds, parseDuration, parseYouTubeInput } from './youtube'
+import { extractChapters, extractTimestamps, fetchLatestUploads, fetchPlaylist, fetchSubscriptionChannelIds, parseDuration, parseYouTubeInput, parseYouTubeVideoId } from './youtube'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -12,6 +12,11 @@ describe('YouTube parsing', () => {
   })
   it('recognizes a YouTube URL embedded in shared text', () => {
     expect(parseYouTubeInput('おすすめ動画 https://youtu.be/TESTVIDEO01?t=12')).toEqual({ type: 'video', id: 'TESTVIDEO01' })
+  })
+  it('accepts only video inputs where a Video ID is required', () => {
+    expect(parseYouTubeVideoId('https://youtu.be/TESTVIDEO01')).toBe('TESTVIDEO01')
+    expect(parseYouTubeVideoId('https://www.youtube.com/channel/UC123')).toBeUndefined()
+    expect(parseYouTubeVideoId('https://www.youtube.com/playlist?list=PL123')).toBeUndefined()
   })
   it('parses ISO duration', () => expect(parseDuration('PT1H2M3S')).toBe(3723))
   it('extracts valid timestamps and rejects impossible or out-of-range values', () => {
