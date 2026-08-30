@@ -7,23 +7,28 @@ export interface StatisticsSummary {
   averagePlaybackRate: number
   timeSavedSeconds: number
   channelSeconds: Record<string, number>
+  categorySeconds: Record<string, number>
   heatmap: Record<string, number>
 }
 
-export function calculateStatistics(sessions: WatchSession[], durations: Record<string, number> = {}): StatisticsSummary {
+export function calculateStatistics(sessions: WatchSession[], durations: Record<string, number> = {}, categories: Record<string, string> = {}): StatisticsSummary {
   let realWatchSeconds = 0
   let weightedRate = 0
   let timeSavedSeconds = 0
-  const watched = new Set<string>()
+  const videoSeconds: Record<string, number> = {}
+  const inferredDurations: Record<string, number> = {}
   const channelSeconds: Record<string, number> = {}
+  const categorySeconds: Record<string, number> = {}
   const heatmap: Record<string, number> = {}
   for (const session of sessions) {
     realWatchSeconds += session.realElapsedSeconds
     weightedRate += session.playbackRates.reduce((sum, entry) => sum + entry.rate * entry.realSeconds, 0)
     timeSavedSeconds += session.watchedMediaSeconds - session.realElapsedSeconds
-    const duration = durations[session.videoId] ?? (session.completionRate > 0 ? session.watchedMediaSeconds / session.completionRate : Infinity)
-    if (countsAsWatched(session.realElapsedSeconds, duration)) watched.add(session.videoId)
+    videoSeconds[session.videoId] = (videoSeconds[session.videoId] ?? 0) + session.realElapsedSeconds
+    if (session.completionRate > 0) inferredDurations[session.videoId] = Math.max(inferredDurations[session.videoId] ?? 0, session.watchedMediaSeconds / session.completionRate)
     if (session.channelId) channelSeconds[session.channelId] = (channelSeconds[session.channelId] ?? 0) + session.realElapsedSeconds
+    const categoryId = categories[session.videoId]
+    if (categoryId) categorySeconds[categoryId] = (categorySeconds[categoryId] ?? 0) + session.realElapsedSeconds
     let cursor = new Date(session.startedAt)
     let remaining = session.realElapsedSeconds
     while (remaining > 0) {
@@ -40,9 +45,10 @@ export function calculateStatistics(sessions: WatchSession[], durations: Record<
       cursor = new Date(cursor.getTime() + allocation * 1000)
     }
   }
+  const watchedVideoCount = Object.entries(videoSeconds).filter(([videoId, seconds]) => countsAsWatched(seconds, durations[videoId] ?? inferredDurations[videoId] ?? Infinity)).length
   return {
-    realWatchSeconds, watchedVideoCount: watched.size,
+    realWatchSeconds, watchedVideoCount,
     averagePlaybackRate: realWatchSeconds ? weightedRate / realWatchSeconds : 0,
-    timeSavedSeconds, channelSeconds, heatmap
+    timeSavedSeconds, channelSeconds, categorySeconds, heatmap
   }
 }

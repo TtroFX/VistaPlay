@@ -20,4 +20,13 @@ describe('statistics aggregation', () => {
   it('allows negative time saved at slower-than-real media progress', () => {
     expect(calculateStatistics([session({ watchedMediaSeconds: 20, realElapsedSeconds: 40, playbackRates: [{ rate: .5, realSeconds: 40 }] })]).timeSavedSeconds).toBe(-20)
   })
+  it('counts accumulated playback for the same video once', () => {
+    const sessions = [session({ realElapsedSeconds: 6, watchedMediaSeconds: 6, playbackRates: [{ rate: 1, realSeconds: 6 }] }), session({ realElapsedSeconds: 6, watchedMediaSeconds: 6, playbackRates: [{ rate: 1, realSeconds: 6 }] })]
+    expect(calculateStatistics(sessions, { 'video-a': 100 }).watchedVideoCount).toBe(1)
+  })
+  it('aggregates category playing time from verified video metadata', () => {
+    const sessions = [session({ realElapsedSeconds: 20 }), session({ videoId: 'video-b', realElapsedSeconds: 15 }), session({ videoId: 'unknown', realElapsedSeconds: 9 })]
+    const result = calculateStatistics(sessions, {}, { 'video-a': '27', 'video-b': '27' })
+    expect(result.categorySeconds).toEqual({ '27': 35 })
+  })
 })
