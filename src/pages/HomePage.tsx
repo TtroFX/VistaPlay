@@ -13,15 +13,22 @@ export default function HomePage() {
   const navigate = useNavigate()
   const [refreshing, setRefreshing] = useState(false)
   const sections = useMemo(() => {
-    const videos = applyVisibilityRules(Object.values(app.state.videos), app.state.settings)
+    const hiddenChannels = new Set(app.state.channelPreferences.filter((item) => item.hideFromHome).map((item) => item.channelId))
+    const videos = applyVisibilityRules(Object.values(app.state.videos), app.state.settings).filter((video) => !video.channelId || !hiddenChannels.has(video.channelId))
     const lookup = (ids: string[]) => ids.map((id) => app.state.videos[id]).filter(Boolean)
     const continuing = Object.values(app.state.history).filter((p) => p.state === 'WATCHING').sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).map((p) => app.state.videos[p.videoId]).filter(Boolean)
+    const categoryCounts = new Map<string, number>()
+    for (const progress of Object.values(app.state.history)) {
+      const category = app.state.videos[progress.videoId]?.categoryId
+      if (category && progress.state !== 'UNWATCHED') categoryCounts.set(category, (categoryCounts.get(category) ?? 0) + 1)
+    }
+    const frequentCategories = new Set([...categoryCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([category]) => category))
     return {
       continue: continuing,
       inbox: lookup(app.state.inbox),
       new: [...videos].filter((v) => v.publishedAt).sort((a, b) => Date.parse(b.publishedAt!) - Date.parse(a.publishedAt!)).slice(0, 12),
       recommended: app.feature('customRecommendation') ? rankLocalRecommendations(videos, app.state).map((item) => item.video) : [],
-      categories: [],
+      categories: videos.filter((video) => Boolean(video.categoryId && frequentCategories.has(video.categoryId))).sort((a, b) => (categoryCounts.get(b.categoryId ?? '') ?? 0) - (categoryCounts.get(a.categoryId ?? '') ?? 0)).slice(0, 12),
       favorites: lookup(app.state.favorites).slice(-12).reverse()
     }
   }, [app.state, app.feature])
