@@ -1,5 +1,5 @@
 import { Bot, CheckCircle2, Clipboard, ExternalLink, FileJson, ShieldCheck } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { VideoCard } from '../components/VideoCard'
 import type { Recommendation } from '../domain/types'
@@ -29,6 +29,9 @@ export default function AIPage() {
   const [input, setInput] = useState('')
   const [status, setStatus] = useState('')
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
+  const [importing, setImporting] = useState(false)
+  const importRequest = useRef<AbortController | undefined>(undefined)
+  const importGeneration = useRef(0)
   const prompt = useMemo(() => buildRecommendationPrompt({
     preset,
     question,
@@ -47,6 +50,7 @@ export default function AIPage() {
           .filter(Boolean)
       : undefined,
   }), [preset, question, count, duration, language, shortsEnabled, shorts, liveEnabled, live, history, current, app.state.history, app.state.videos])
+  useEffect(() => () => importRequest.current?.abort(), [])
 
   async function copyPrompt() {
     if (!promptEnabled) return
@@ -56,24 +60,23 @@ export default function AIPage() {
 
   async function importJson() {
     if (!importEnabled) return
+    importRequest.current?.abort()
+    const controller = new AbortController()
+    importRequest.current = controller
+    const generation = ++importGeneration.current
+    setImporting(true)
     setStatus('JSONを検証中…')
     try {
       const parsed = parseAIImport(input)
       if (parsed.type === 'youtube_search') {
         if (!smartSearchEnabled) throw new Error('Smart SearchはSettingsで無効です')
-        const cutoff = Date.now() - 30 * 86400000
         const entry = {
           id: crypto.randomUUID(),
           query: parsed.searches.map((item) => item.query).join(' / '),
           videoIds: [],
           createdAt: new Date().toISOString(),
         }
-        app.replaceState({
-          ...app.state,
-          aiImportHistory: [entry, ...app.state.aiImportHistory.filter((item) => Date.parse(item.createdAt) >= cutoff)].slice(0, 50),
-          revision: app.state.revision + 1,
-          updatedAt: new Date().toISOString(),
-        })
+        app.recordAIImport(entry)
         sessionStorage.setItem('vistaplay-smart-search', JSON.stringify(parsed))
         setStatus(`${parsed.searches.length}件の検索Queryを検証しました。`)
         navigate(`/search?q=${encodeURIComponent(parsed.searches[0].query)}`)
@@ -81,27 +84,22 @@ export default function AIPage() {
       }
 
       setStatus('YouTube側でVideo IDを再検証中…')
-      const checked = await verifyVideoIds(parsed.items.map((item) => item.videoId))
-      app.upsertVideos(checked.valid)
+      const checked = await verifyVideoIds(parsed.items.map((item) => item.videoId), controller.signal)
+      if (controller.signal.aborted || importGeneration.current !== generation) return
       const metadata = new Map(checked.valid.map((video) => [video.videoId, video]))
       const next = parsed.items
         .filter((item) => metadata.has(item.videoId))
         .map((item) => ({ video: metadata.get(item.videoId)!, reason: item.reason, priority: item.priority, source: 'chatgpt' as const }))
         .sort((a, b) => a.priority - b.priority)
       setRecommendations(next)
-      const cutoff = Date.now() - 30 * 86400000
       const entry = { id: crypto.randomUUID(), query: parsed.query, videoIds: next.map((item) => item.video.videoId), createdAt: new Date().toISOString() }
-      app.replaceState({
-        ...app.state,
-        aiImportHistory: [entry, ...app.state.aiImportHistory.filter((item) => Date.parse(item.createdAt) >= cutoff)].slice(0, 50),
-        revision: app.state.revision + 1,
-        updatedAt: new Date().toISOString(),
-      })
+      app.recordAIImport(entry, checked.valid)
       setStatus(`${next.length}件を確認済み。${checked.invalid.length}件の無効・非公開候補を隔離しました。${parsed.warnings.length ? ` ${parsed.warnings.length} warning.` : ''}`)
     } catch (error) {
+      if (controller.signal.aborted || importGeneration.current !== generation) return
       setRecommendations([])
       setStatus(`拒否: ${error instanceof Error ? error.message : 'Invalid import'}`)
-    }
+    } finally { if (importGeneration.current === generation) setImporting(false) }
   }
 
   return <div className="page ai-page">
@@ -126,7 +124,7 @@ export default function AIPage() {
       {importEnabled && <section className="ai-import">
         <div className="flow-step"><span>{promptEnabled ? '2' : '1'}</span><div><h2>JSONを貼り付ける</h2><p>最大64KiB。実行可能CodeとHTMLは扱いません。</p></div></div>
         <textarea value={input} onChange={(event) => setInput(event.target.value)} placeholder='{"version":1,"type":"youtube_recommendations",...}' />
-        <button className="primary-button" onClick={() => void importJson()} disabled={!input.trim()}><ShieldCheck />Validate → YouTube Verification</button>
+        <button className="primary-button" onClick={() => void importJson()} disabled={!input.trim() || importing}><ShieldCheck />{importing ? '検証中…' : 'Validate → YouTube Verification'}</button>
         {status && <div className={`import-status ${status.startsWith('拒否') ? 'error' : ''}`}><FileJson /><span>{status}</span></div>}
       </section>}
     </div>

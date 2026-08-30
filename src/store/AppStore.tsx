@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react'
 import { createDefaultState, isFeatureRuntimeEnabled } from '../config/features'
 import { loadAppState, saveAppState, saveWatchSession } from '../data/repository'
-import type { FeatureKey, PersistedAppState, QueueItem, SavedQueue, ToastMessage, VideoRef, WatchProgress, WatchSession } from '../domain/types'
+import type { AIImportHistoryEntry, FeatureKey, PersistedAppState, QueueItem, SavedQueue, ToastMessage, VideoRef, WatchProgress, WatchSession } from '../domain/types'
+import { addAIImportHistory } from '../lib/aiBridge'
 import { isCompleted, shouldPersistProgress } from '../lib/playerMath'
 import { recordDiagnostic } from '../lib/diagnostics'
 import { playerEngine, type PlayerSnapshot } from '../player/PlayerEngine'
@@ -44,6 +45,7 @@ interface AppContextValue {
   acceptExternalState: (state: PersistedAppState, reconcile?: boolean) => void
   upsertVideos: (videos: VideoRef[]) => void
   addSearchHistory: (query: string) => void
+  recordAIImport: (entry: AIImportHistoryEntry, videos?: VideoRef[]) => void
   recordProgress: (videoId: string, position: number, duration: number, watchedDelta?: number) => void
   recordSession: (session: WatchSession) => void
   notify: (message: string, tone?: ToastMessage['tone'], undo?: () => void, duration?: number) => void
@@ -110,6 +112,11 @@ export function AppProvider({ children }: PropsWithChildren) {
 
   const upsertVideos = useCallback((videos: VideoRef[]) => mutate((current) => ({ ...current, videos: { ...current.videos, ...Object.fromEntries(videos.map((video) => [video.videoId, { ...current.videos[video.videoId], ...video }])) } })), [mutate])
   const addSearchHistory = useCallback((query: string) => mutate((current) => ({ ...current, searchHistory: [query, ...current.searchHistory.filter((item) => item !== query)].slice(0, 50) })), [mutate])
+  const recordAIImport = useCallback((entry: AIImportHistoryEntry, videos: VideoRef[] = []) => mutate((current) => ({
+    ...current,
+    videos: { ...current.videos, ...Object.fromEntries(videos.map((video) => [video.videoId, { ...current.videos[video.videoId], ...video }])) },
+    aiImportHistory: addAIImportHistory(current.aiImportHistory, entry),
+  })), [mutate])
 
   const playVideo = useCallback((video: VideoRef, position?: number) => {
     setCurrentVideo(video)
@@ -261,9 +268,9 @@ export function AppProvider({ children }: PropsWithChildren) {
   const value = useMemo<AppContextValue>(() => ({
     state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext,
     saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, resetProgress, hideVideo, addFolder, toggleFolderVideo,
-    addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, recordProgress, recordSession, notify,
+    addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, recordAIImport, recordProgress, recordSession, notify,
     addSearchHistory, dismissToast: (id) => setToasts((items) => items.filter((item) => item.id !== id))
-  }), [state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext, saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, resetProgress, hideVideo, addFolder, toggleFolderVideo, addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, addSearchHistory, recordProgress, recordSession, notify])
+  }), [state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext, saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, resetProgress, hideVideo, addFolder, toggleFolderVideo, addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, addSearchHistory, recordAIImport, recordProgress, recordSession, notify])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

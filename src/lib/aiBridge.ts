@@ -1,9 +1,14 @@
-import type { VideoRef } from '../domain/types'
+import type { AIImportHistoryEntry, VideoRef } from '../domain/types'
 
 export interface YTRecItem { videoId: string; title?: string; channel?: string; reason: string; priority: number }
 export interface YTRecImport { version: 1; type: 'youtube_recommendations'; query: string; items: YTRecItem[]; warnings: string[] }
 export interface SmartSearchImport { version: 1; type: 'youtube_search'; searches: Array<{ query: string; filters?: { shorts?: boolean; live?: boolean } }>; warnings: string[] }
 export type AIImportDocument = YTRecImport | SmartSearchImport
+
+export function addAIImportHistory(history: AIImportHistoryEntry[], entry: AIImportHistoryEntry, now = Date.now()): AIImportHistoryEntry[] {
+  const cutoff = now - 30 * 86400000
+  return [entry, ...history.filter((item) => item.id !== entry.id && Date.parse(item.createdAt) >= cutoff)].slice(0, 50)
+}
 
 function parseStrictJson(input: string): unknown {
   const bytes = new TextEncoder().encode(input).byteLength

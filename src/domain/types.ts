@@ -65,6 +65,7 @@ export interface AutoAddRule {
   updatedAt: string
 }
 export interface Recommendation { video: VideoRef; reason: string; priority: number; source: 'local' | 'chatgpt' }
+export interface AIImportHistoryEntry { id: string; query: string; videoIds: string[]; createdAt: string }
 export interface SearchFilters { type: 'video' | 'channel' | 'playlist'; publishedAfter?: string; duration: 'any' | 'short' | 'medium' | 'long'; live: 'any' | 'live' | 'upcoming'; excludeChannels: string[]; excludeKeywords: string[]; shorts: 'include' | 'exclude' | 'only'; whitelistOnly: boolean }
 export interface SearchResult { type: 'video' | 'channel' | 'playlist'; id: string; title: string; description?: string; thumbnail?: string; channelId?: string; channelTitle?: string; video?: VideoRef }
 export interface ThemeSettings { mode: ThemeMode; surface: SurfaceTone; accent: string }
@@ -98,7 +99,7 @@ export interface PersistedAppState {
   videoPreferences: VideoPreference[]
   autoAddRules: AutoAddRule[]
   searchHistory: string[]
-  aiImportHistory: Array<{ id: string; query: string; videoIds: string[]; createdAt: string }>
+  aiImportHistory: AIImportHistoryEntry[]
   lastPlayer?: { videoId: string; position: number; queueItemId?: string; updatedAt: string }
   syncMetadata: SyncMetadata
   revision: number

@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { parseAIImport, parseSmartSearch, parseYTRec } from './aiBridge'
+import { addAIImportHistory, parseAIImport, parseSmartSearch, parseYTRec } from './aiBridge'
 
 describe('AI import validation', () => {
+  it('keeps at most 50 local imports and removes entries older than 30 days', () => {
+    const now = Date.parse('2026-08-30T00:00:00.000Z')
+    const recent = Array.from({ length: 55 }, (_, index) => ({ id: `recent-${index}`, query: 'query', videoIds: [], createdAt: new Date(now - index * 3600000).toISOString() }))
+    const old = { id: 'old', query: 'old', videoIds: [], createdAt: '2026-06-01T00:00:00.000Z' }
+    const entry = { id: 'current', query: 'current', videoIds: ['TESTVIDEO01'], createdAt: new Date(now).toISOString() }
+    const result = addAIImportHistory([...recent, old], entry, now)
+    expect(result).toHaveLength(50)
+    expect(result[0]).toEqual(entry)
+    expect(result.some((item) => item.id === 'old')).toBe(false)
+  })
   it('accepts YTREC v1 and warns about unknown fields', () => {
     const parsed = parseYTRec(JSON.stringify({ version: 1, type: 'youtube_recommendations', query: 'test', extra: true, items: [{ videoId: 'dQw4w9WgXcQ', title: 'untrusted', channel: 'untrusted', reason: 'fit', priority: 1, extraItem: 1 }] }))
     expect(parsed.items).toHaveLength(1)
