@@ -49,10 +49,14 @@ export function AppShell() {
   }, [app.player.availableRates, app.player.rate])
 
   const fullPlayer = location.pathname === '/watch'
-  return <div className={`app-shell sidebar-${app.state.settings.layout.sidebarMode} cards-${app.state.settings.layout.cardSize} ${app.currentVideo && !fullPlayer ? 'has-mini-player' : ''}`}>
+  const focusMode = fullPlayer && app.state.settings.layout.focusMode
+  const cinemaMode = fullPlayer && app.state.settings.layout.cinemaMode
+  const configuredSidebar = app.state.settings.layout.sidebarMode
+  const effectiveSidebar = (focusMode || cinemaMode) && configuredSidebar === 'expanded' ? 'compact' : configuredSidebar
+  return <div className={`app-shell sidebar-${effectiveSidebar} cards-${app.state.settings.layout.cardSize} ${app.currentVideo && !fullPlayer ? 'has-mini-player' : ''} ${focusMode ? 'focus-mode' : ''} ${cinemaMode ? 'cinema-mode' : ''}`}>
     <Sidebar />
     <div className="app-column">
-      {!app.state.settings.layout.focusMode && <TopBar />}
+      {!focusMode && <TopBar />}
       <main ref={swipeRef} className={`main-content ${fullPlayer ? 'watch-stage' : ''}`}>
         <PersistentPlayer />
         <Suspense fallback={<LoadingCards />}><Outlet /></Suspense>

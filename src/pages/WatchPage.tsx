@@ -24,7 +24,11 @@ export default function WatchPage() {
   const [sponsors, setSponsors] = useState<SponsorSegment[]>([]); const [descriptionOpen, setDescriptionOpen] = useState(false)
   const video = videoId ? app.state.videos[videoId] ?? (app.currentVideo?.videoId === videoId ? app.currentVideo : undefined) : undefined
   const chapters = useMemo(() => extractChapters(video?.description ?? '', video?.durationSeconds), [video?.description, video?.durationSeconds])
-  const tabs = ([['queue', 'Queue', ListVideo], ...(app.feature('chapters') ? [['chapters', 'Chapters', FileText]] : []), ...(app.feature('comments') ? [['comments', 'Comments', MessageCircle]] : []), ...(app.feature('captions') ? [['captions', 'Captions', Captions]] : []), ...(app.feature('liveChat') && video?.liveStatus === 'live' ? [['livechat', 'Live Chat', MessageCircle]] : []), ['overview', 'Overview', Sparkles]] as Array<[WatchTab, string, typeof ListVideo]>)
+  const focusMode = app.state.settings.layout.focusMode
+  const cinemaMode = app.state.settings.layout.cinemaMode
+  const allTabs = ([['queue', 'Queue', ListVideo], ...(app.feature('chapters') ? [['chapters', 'Chapters', FileText]] : []), ...(app.feature('comments') ? [['comments', 'Comments', MessageCircle]] : []), ...(app.feature('captions') ? [['captions', 'Captions', Captions]] : []), ...(app.feature('liveChat') && video?.liveStatus === 'live' ? [['livechat', 'Live Chat', MessageCircle]] : []), ['overview', 'Overview', Sparkles]] as Array<[WatchTab, string, typeof ListVideo]>)
+  const tabs = focusMode ? allTabs.filter(([key]) => key === 'chapters' || key === 'captions') : allTabs
+  const paneVisible = !cinemaMode && tabs.length > 0
   const availableTabKeys = tabs.map(([key]) => key).join(',')
 
   useEffect(() => {
@@ -40,12 +44,12 @@ export default function WatchPage() {
   }, [videoId])
 
   useEffect(() => {
-    if (!videoId || !app.feature('sponsorSegments')) { setSponsors([]); return }
+    if (!videoId || !app.feature('sponsorSegments') || focusMode) { setSponsors([]); return }
     const controller = new AbortController(); fetchSponsorSegments(videoId, controller.signal).then(setSponsors).catch(() => setSponsors([])); return () => controller.abort()
-  }, [app.feature, videoId])
+  }, [app.feature, focusMode, videoId])
 
-  useEffect(() => { if (app.feature('comments') && tab === 'comments' && !comments.length) void loadComments(false) }, [tab, commentOrder, app.feature])
-  useEffect(() => { if (!tabs.some(([key]) => key === tab)) setTab('queue') }, [availableTabKeys, tab])
+  useEffect(() => { if (!focusMode && !cinemaMode && app.feature('comments') && tab === 'comments' && !comments.length) void loadComments(false) }, [tab, commentOrder, app.feature, focusMode, cinemaMode])
+  useEffect(() => { if (tabs.length && !tabs.some(([key]) => key === tab)) setTab(tabs[0][0]) }, [availableTabKeys, tab])
 
   async function loadComments(append: boolean) {
     if (!app.feature('comments') || !videoId || commentLoading || comments.length >= 200) return
@@ -64,17 +68,19 @@ export default function WatchPage() {
     const repliesMatch = !commentHasReplies || comment.replies.length > 0
     return keywordMatches && usernameMatches && timestampMatches && repliesMatch
   })
-  return <div className={`watch-page ${app.state.settings.layout.cinemaMode ? 'cinema' : ''}`}>
+  return <div className={`watch-page ${cinemaMode ? 'cinema' : ''} ${focusMode ? 'focus' : ''}`}>
     <div className="watch-content-grid">
       <section className="watch-primary">
-        <div className="video-information"><h1>{shown.title}</h1><div className="video-byline">{shown.channelId ? <button onClick={() => navigate(`/channel/${shown.channelId}`)}><UserRound />{shown.channelTitle ?? 'Channel'}<ChevronRight /></button> : <span>{shown.channelTitle ?? 'Channel metadata pending'}</span>}<span>{shown.viewCount !== undefined ? `${Intl.NumberFormat('ja', { notation: 'compact' }).format(shown.viewCount)} views` : ''}</span><span>{shown.publishedAt ? new Date(shown.publishedAt).toLocaleDateString('ja-JP') : ''}</span></div>
+        <div className="video-information"><h1>{shown.title}</h1>{!focusMode && <div className="video-byline">{shown.channelId ? <button onClick={() => navigate(`/channel/${shown.channelId}`)}><UserRound />{shown.channelTitle ?? 'Channel'}<ChevronRight /></button> : <span>{shown.channelTitle ?? 'Channel metadata pending'}</span>}<span>{shown.viewCount !== undefined ? `${Intl.NumberFormat('ja', { notation: 'compact' }).format(shown.viewCount)} views` : ''}</span><span>{shown.publishedAt ? new Date(shown.publishedAt).toLocaleDateString('ja-JP') : ''}</span></div>}
+          {!focusMode && <>
           <div className="watch-actions"><button className={app.state.favorites.includes(videoId) ? 'active' : ''} onClick={() => app.toggleFavorite(shown)}><Heart fill={app.state.favorites.includes(videoId) ? 'currentColor' : 'none'} />お気に入り</button><button onClick={() => app.addQueue(shown)}><Plus />Queue</button><button className={app.state.watchLater.includes(videoId) ? 'active' : ''} onClick={() => app.toggleWatchLater(shown)}><Clock3 />後で見る</button>{app.feature('watchInbox') && <button onClick={() => app.toggleInbox(shown)}><Inbox />Inbox</button>}<button onClick={() => navigate(`/library?organize=${videoId}`)}><Tags />整理</button>{app.feature('compare') && <button onClick={() => navigate(`/compare?a=${videoId}`)}><GitCompareArrows />比較</button>}{app.feature('chatgpt') && <button className="ai-subtle" onClick={() => navigate(`/ai?video=${videoId}`)}><Bot />AIに関連動画を聞く</button>}<button onClick={() => app.archiveVideo(videoId)}><Archive />Archive</button></div>
           <div className="rate-memory"><span>Speed memory</span><button onClick={() => app.setVideoRate(videoId, app.player.rate)}>この動画を{app.player.rate}xに固定</button>{app.state.videoPreferences.some((item) => item.videoId === videoId) && <button onClick={() => app.setVideoRate(videoId)}>動画固有設定を解除</button>}</div>
+          </>}
         </div>
-        {sponsors.length > 0 && <div className="sponsor-actions"><span><SkipForward />SponsorBlock（自動Skip OFF）</span>{sponsors.map((segment, index) => <button key={`${segment.segment[0]}-${index}`} onClick={() => playerEngine.seekTo(segment.segment[1])}>{segment.category} {formatDuration(segment.segment[0])} → Skip</button>)}</div>}
-        {shown.description && <div className={`description-panel ${descriptionOpen ? 'open' : ''}`}><p>{shown.description}</p><button onClick={() => setDescriptionOpen((value) => !value)}>{descriptionOpen ? '閉じる' : 'もっと見る'}<ChevronDown /></button></div>}
+        {!focusMode && sponsors.length > 0 && <div className="sponsor-actions"><span><SkipForward />SponsorBlock（自動Skip OFF）</span>{sponsors.map((segment, index) => <button key={`${segment.segment[0]}-${index}`} onClick={() => playerEngine.seekTo(segment.segment[1])}>{segment.category} {formatDuration(segment.segment[0])} → Skip</button>)}</div>}
+        {!focusMode && shown.description && <div className={`description-panel ${descriptionOpen ? 'open' : ''}`}><p>{shown.description}</p><button onClick={() => setDescriptionOpen((value) => !value)}>{descriptionOpen ? '閉じる' : 'もっと見る'}<ChevronDown /></button></div>}
       </section>
-      {!app.state.settings.layout.focusMode && <aside className="watch-pane" style={{ width: app.state.settings.layout.rightPaneWidth }}><div className="pane-tabs" role="tablist">{tabs.map(([key, label, Icon]) => <button role="tab" aria-selected={tab === key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)} key={key}><Icon />{label}</button>)}</div><div className="pane-content">
+      {paneVisible && <aside className="watch-pane" style={{ width: app.state.settings.layout.rightPaneWidth }}><div className="pane-tabs" role="tablist">{tabs.map(([key, label, Icon]) => <button role="tab" aria-selected={tab === key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)} key={key}><Icon />{label}</button>)}</div><div className="pane-content">
         {tab === 'queue' && <div className="pane-queue">{app.state.queue.length ? app.state.queue.map((item, index) => <button key={item.id} onClick={() => { app.playQueueItem(item.id); navigate(`/watch?v=${item.video.videoId}`) }}><span>{index + 1}</span><img src={item.video.thumbnail} alt="" /><strong>{item.video.title}</strong></button>) : <p className="pane-empty">Queueは空です</p>}</div>}
         {tab === 'chapters' && (chapters.length ? <div className="chapter-list">{chapters.map((chapter) => <button key={chapter.start} onClick={() => playerEngine.seekTo(chapter.start)}><span>{formatDuration(chapter.start)}</span><strong>{chapter.title}</strong></button>)}</div> : <p className="pane-empty">DescriptionからChapterを検出できませんでした。</p>)}
         {tab === 'captions' && <div className="capability-copy"><Captions /><h3>YouTube標準Caption</h3><p>字幕はPlayer内の正式Caption操作から利用できます。iframe字幕のscrapingは行いません。</p></div>}
@@ -83,7 +89,7 @@ export default function WatchPage() {
         {tab === 'comments' && <div className="comments-panel"><div className="comment-toolbar"><input value={commentKeyword} onChange={(e) => setCommentKeyword(e.target.value)} placeholder="Keyword" aria-label="Comment keyword" /><input value={commentUsername} onChange={(e) => setCommentUsername(e.target.value)} placeholder="Username" aria-label="Comment username" /><select value={commentOrder} onChange={(e) => { setCommentOrder(e.target.value as 'relevance' | 'time'); setComments([]); setCommentNext(undefined) }}><option value="relevance">Relevance</option><option value="time">Newest</option></select><label className="check-label compact-check"><input type="checkbox" checked={commentHasTimestamp} onChange={(e) => setCommentHasTimestamp(e.target.checked)} />Timestampあり</label><label className="check-label compact-check"><input type="checkbox" checked={commentHasReplies} onChange={(e) => setCommentHasReplies(e.target.checked)} />Replyあり</label></div>{commentError && <p className="error-copy">{commentError}</p>}{!commentLoading && !filteredComments.length && <p className="pane-empty">取得済みCommentに一致する結果はありません。</p>}{filteredComments.map((comment) => <CommentItem comment={comment} duration={shown.durationSeconds} key={comment.id} />)}{commentNext && comments.length < 200 && <button className="load-comments" disabled={commentLoading} onClick={() => void loadComments(true)}>{commentLoading ? '読み込み中…' : 'さらに20件取得'}</button>}</div>}
       </div></aside>}
     </div>
-    <section className="notes-inline"><NotebookPen /><div><strong>Note</strong><span>Plain text / 最大20,000文字 / focusを外すと保存</span></div><textarea maxLength={20000} defaultValue={app.state.notes.find((note) => note.videoId === videoId)?.text ?? ''} onBlur={(e) => app.saveNote(videoId, e.target.value)} /></section>
+    {!focusMode && <section className="notes-inline"><NotebookPen /><div><strong>Note</strong><span>Plain text / 最大20,000文字 / focusを外すと保存</span></div><textarea maxLength={20000} defaultValue={app.state.notes.find((note) => note.videoId === videoId)?.text ?? ''} onBlur={(e) => app.saveNote(videoId, e.target.value)} /></section>}
   </div>
 }
 
