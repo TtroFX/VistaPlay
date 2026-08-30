@@ -3,6 +3,7 @@ import { createDefaultState, isFeatureRuntimeEnabled } from '../config/features'
 import { loadAppState, saveAppState, saveWatchSession } from '../data/repository'
 import type { AIImportHistoryEntry, FeatureKey, PersistedAppState, QueueItem, SavedQueue, ToastMessage, VideoRef, WatchProgress, WatchSession } from '../domain/types'
 import { addAIImportHistory } from '../lib/aiBridge'
+import { insertUniqueAt } from '../lib/collectionRules'
 import { isCompleted, shouldPersistProgress } from '../lib/playerMath'
 import { recordDiagnostic } from '../lib/diagnostics'
 import { playerEngine, type PlayerSnapshot } from '../player/PlayerEngine'
@@ -158,10 +159,14 @@ export function AppProvider({ children }: PropsWithChildren) {
   })), [mutate])
 
   const removeQueue = useCallback((id: string) => {
-    const removed = state.queue.find((item) => item.id === id)
-    if (!removed) return
+    const removedIndex = state.queue.findIndex((item) => item.id === id)
+    const removed = state.queue[removedIndex]
+    if (!removed || removedIndex < 0) return
     mutate((current) => ({ ...current, queue: current.queue.filter((item) => item.id !== id) }))
-    notify('Queueから削除しました', 'default', () => mutate((current) => ({ ...current, queue: uniqueQueue([...current.queue, removed]) })))
+    notify('Queueから削除しました', 'default', () => mutate((current) => ({
+      ...current,
+      queue: insertUniqueAt(current.queue, removed, removedIndex, (item) => item.video.videoId),
+    })))
   }, [mutate, notify, state.queue])
 
   const reorderQueue = useCallback((from: number, to: number) => mutate((current) => {
@@ -213,9 +218,20 @@ export function AppProvider({ children }: PropsWithChildren) {
   const deleteSavedQueue = useCallback((id: string) => mutate((current) => ({ ...current, savedQueues: current.savedQueues.filter((item) => item.id !== id) })), [mutate])
 
   const toggleList = useCallback((field: 'favorites' | 'watchLater' | 'inbox', video: VideoRef, label: string) => {
-    const existed = state[field].includes(video.videoId)
-    mutate((current) => ({ ...current, videos: { ...current.videos, [video.videoId]: video }, [field]: existed ? current[field].filter((id) => id !== video.videoId) : [...current[field], video.videoId] }))
-    notify(existed ? `${label}から外しました` : `${label}へ追加しました`, existed ? 'default' : 'success', existed ? () => mutate((current) => ({ ...current, [field]: [...current[field], video.videoId] })) : undefined)
+    const previousIndex = state[field].indexOf(video.videoId)
+    const existed = previousIndex >= 0
+    mutate((current) => {
+      const currentExisted = current[field].includes(video.videoId)
+      return {
+        ...current,
+        videos: { ...current.videos, [video.videoId]: video },
+        [field]: currentExisted ? current[field].filter((id) => id !== video.videoId) : [...current[field], video.videoId],
+      }
+    })
+    notify(existed ? `${label}から外しました` : `${label}へ追加しました`, existed ? 'default' : 'success', existed ? () => mutate((current) => ({
+      ...current,
+      [field]: insertUniqueAt(current[field], video.videoId, previousIndex, String),
+    })) : undefined)
   }, [mutate, notify, state])
 
   const toggleFavorite = useCallback((video: VideoRef) => toggleList('favorites', video, 'お気に入り'), [toggleList])
