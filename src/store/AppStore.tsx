@@ -68,6 +68,8 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [player, setPlayer] = useState<PlayerSnapshot>(playerEngine.state)
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const saveTimer = useRef<number>(undefined)
+  const latestState = useRef(state)
+  const hydrationReady = useRef(false)
 
   useEffect(() => {
     loadAppState().then((loaded) => {
@@ -92,10 +94,24 @@ export function AppProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!hydrated) return
+    latestState.current = state
+    hydrationReady.current = true
     window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => { void saveAppState(state) }, 220)
+    saveTimer.current = window.setTimeout(() => { void saveAppState(state).catch(() => recordDiagnostic('migration', 'Local state save failed')) }, 220)
     return () => window.clearTimeout(saveTimer.current)
   }, [state, hydrated])
+
+  useEffect(() => {
+    const flush = () => {
+      if (!hydrationReady.current) return
+      window.clearTimeout(saveTimer.current)
+      void saveAppState(latestState.current).catch(() => recordDiagnostic('migration', 'Local state flush failed'))
+    }
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flush() }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', flush)
+    return () => { document.removeEventListener('visibilitychange', onVisibility); window.removeEventListener('pagehide', flush); flush() }
+  }, [])
 
   const mutate = useCallback((updater: (current: PersistedAppState) => PersistedAppState) => {
     setState((current) => {
