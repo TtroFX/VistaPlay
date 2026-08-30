@@ -195,6 +195,7 @@ label input:focus, label select:focus, textarea:focus, .inline-form input:focus 
 .share-preview h1, .share-preview p { margin: 0; }
 .share-video { display: grid; grid-template-columns: minmax(180px, 42%) 1fr; gap: 20px; align-items: center; }
 .share-video img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 14px; background: var(--surface-2); }
+.cloud-opt-in { min-width: min(320px, 100%); }
 @media (max-width: 620px) { .share-video { grid-template-columns: 1fr; } }
 .entity-result strong, .entity-result small { display: block; }
 .entity-result small { margin-top: 6px; color: var(--muted); }
