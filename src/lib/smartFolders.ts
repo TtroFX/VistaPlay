@@ -1,5 +1,10 @@
 import type { PersistedAppState, SmartCondition, SmartFolder, VideoRef } from '../domain/types'
 
+export function smartFolderUsesField(folder: SmartFolder, field: SmartCondition['field']): boolean {
+  return folder.conditions.some((condition) => condition.field === field)
+    || Boolean(folder.groups?.some((group) => group.conditions.some((condition) => condition.field === field)))
+}
+
 function matchesCondition(video: VideoRef, condition: SmartCondition, state: PersistedAppState, now: number): boolean {
   const progress = state.history[video.videoId]
   let actual: string | number | boolean | undefined

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createDefaultState } from '../config/features'
-import { evaluateSmartFolder } from './smartFolders'
+import { evaluateSmartFolder, smartFolderUsesField } from './smartFolders'
 
 describe('smart folder groups', () => {
   it('supports AND/OR and date age conditions', () => {
@@ -27,5 +27,7 @@ describe('smart folder groups', () => {
       ],
     }
     expect(evaluateSmartFolder(folder, state, Date.parse('2026-01-10T00:00:00.000Z')).map((video) => video.videoId)).toEqual(['a', 'b'])
+    expect(smartFolderUsesField({ ...folder, conditions: [] }, 'channel')).toBe(true)
+    expect(smartFolderUsesField({ ...folder, conditions: [] }, 'tag')).toBe(false)
   })
 })
