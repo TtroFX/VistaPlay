@@ -28,4 +28,4 @@ UI mutations update a single normalized application state, debounce it into Inde
 
 ## Security
 
-No `eval`, `Function`, arbitrary HTML injection or generated JavaScript execution. AI import is JSON-only, bounded before parsing, and verified by video ID. OAuth is not written to `localStorage`. Server secrets must not use the `VITE_` namespace.
+No `eval`, `Function`, arbitrary HTML injection or generated JavaScript execution. AI import is JSON-only, bounded before parsing, and verified by video ID. OAuth is not written to `localStorage`. Authorization-bearing Google/YouTube responses are never stored by the Service Worker; bounded public metadata/search caching is owned by IndexedDB. Server secrets must not use the `VITE_` namespace.

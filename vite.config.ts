@@ -41,11 +41,6 @@ export default defineConfig({
             urlPattern: /^https:\/\/i\.ytimg\.com\//,
             handler: 'CacheFirst',
             options: { cacheName: 'youtube-thumbnails', expiration: { maxEntries: 200, maxAgeSeconds: 86400 } }
-          },
-          {
-            urlPattern: /^https:\/\/www\.googleapis\.com\/youtube\/v3\//,
-            handler: 'NetworkFirst',
-            options: { cacheName: 'youtube-api', networkTimeoutSeconds: 5, expiration: { maxEntries: 100, maxAgeSeconds: 21600 } }
           }
         ]
       }

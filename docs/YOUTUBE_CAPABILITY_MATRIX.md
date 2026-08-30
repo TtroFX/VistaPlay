@@ -16,3 +16,5 @@
 | Download | Not implemented | No button or unofficial route |
 
 Production keys must be restricted in Google Cloud to the deployed origins and required APIs. Quota exhaustion is surfaced as a capability error, not hidden behind fabricated data.
+
+Authorization-bearing subscription responses bypass Service Worker caching. VistaPlay caches public API data only through its versioned IndexedDB TTL/LRU layer.
