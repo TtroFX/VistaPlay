@@ -364,6 +364,9 @@ textarea { width: 100%; min-height: 110px; padding: 12px; border: 1px solid var(
 .compact-check { min-height: 38px; padding: 4px 8px; border-radius: 9px; background: var(--surface-2); font-size: 12px; }
 .condition-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 18px; }
 .condition-chips .filter-chip svg { width: 14px; height: 14px; }
+.smart-group-list { display: flex; flex-wrap: wrap; gap: 9px; margin: 12px 0; }
+.smart-group-list > div { min-height: 48px; display: flex; align-items: center; gap: 9px; padding: 4px 8px 4px 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); }
+.smart-group-list span { color: var(--muted); font-size: 12px; }
 .diagnostic-summary { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 12px; }
 .diagnostic-summary span { padding: 9px 12px; border-radius: 10px; background: var(--surface-2); color: var(--muted); }
 .diagnostic-list { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; }

@@ -22,7 +22,12 @@ function matchesCondition(video: VideoRef, condition: SmartCondition, state: Per
 export function evaluateSmartFolder(folder: SmartFolder, state: PersistedAppState, now = Date.now()): VideoRef[] {
   const videos = Object.values(state.videos)
   return videos.filter((video) => {
-    const outcomes = folder.conditions.map((condition) => matchesCondition(video, condition, state, now))
-    return folder.operator === 'and' ? outcomes.every(Boolean) : outcomes.some(Boolean)
+    const groups = folder.groups?.length ? folder.groups : [{ operator: folder.operator, conditions: folder.conditions }]
+    const groupOutcomes = groups.map((group) => {
+      if (!group.conditions.length) return false
+      const outcomes = group.conditions.map((condition) => matchesCondition(video, condition, state, now))
+      return group.operator === 'and' ? outcomes.every(Boolean) : outcomes.some(Boolean)
+    })
+    return folder.operator === 'and' ? groupOutcomes.every(Boolean) : groupOutcomes.some(Boolean)
   })
 }

@@ -45,7 +45,8 @@ export interface Folder { id: string; name: string; parentId?: string; videoIds:
 export interface Tag { id: string; canonical: string; display: string; color?: string; videoIds: string[]; updatedAt: string }
 export type SmartOperator = 'and' | 'or'
 export interface SmartCondition { field: 'channel' | 'category' | 'tag' | 'duration' | 'watchState' | 'favorite' | 'addedDate' | 'publishedDate'; op: 'eq' | 'contains' | 'lt' | 'gt'; value: string | number | boolean }
-export interface SmartFolder { id: string; name: string; operator: SmartOperator; conditions: SmartCondition[]; updatedAt: string }
+export interface SmartConditionGroup { operator: SmartOperator; conditions: SmartCondition[] }
+export interface SmartFolder { id: string; name: string; operator: SmartOperator; conditions: SmartCondition[]; groups?: SmartConditionGroup[]; updatedAt: string }
 export interface Note { videoId: string; text: string; updatedAt: string }
 export interface ChannelPreference { channelId: string; playbackRate?: number; homePriority: number; hideFromHome: boolean; shorts: 'default' | 'prefer' | 'avoid'; queueAutoplay: boolean; updatedAt: string }
 export interface VideoPreference { videoId: string; playbackRate?: number; updatedAt: string }
