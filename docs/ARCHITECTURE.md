@@ -16,7 +16,7 @@ The Player Engine owns YouTube IFrame API lifecycle and is not recreated by rout
 
 ## Data path
 
-UI mutations update a single normalized application state, debounce it into IndexedDB, and separately write append-only WatchSessions. API metadata is verified before replacing untrusted imported metadata. Search/cache data uses an evictable store; user data never participates in cache eviction. Cloud payloads exclude cache-only video metadata; after merge, referenced IDs are rehydrated through YouTube verification, embedded queue metadata, or safe offline fallbacks.
+UI mutations update a single normalized application state, debounce it into IndexedDB, and separately write append-only WatchSessions. API metadata is verified before replacing untrusted imported metadata. Search/cache data uses an evictable store; user data never participates in cache eviction. Cloud payloads exclude cache-only video metadata; after merge, referenced IDs are rehydrated through YouTube verification, embedded queue metadata, or safe offline fallbacks. A completed cloud request is reconciled with the current in-memory state so playback and library mutations made while the request was in flight are retained.
 
 ## Failure strategy
 

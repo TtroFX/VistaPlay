@@ -5,7 +5,7 @@ import type { FeatureKey, PersistedAppState, QueueItem, SavedQueue, ToastMessage
 import { isCompleted, shouldPersistProgress } from '../lib/playerMath'
 import { recordDiagnostic } from '../lib/diagnostics'
 import { playerEngine, type PlayerSnapshot } from '../player/PlayerEngine'
-import { stampSyncMetadata } from '../sync/conflicts'
+import { mergeCloudStates, stampSyncMetadata } from '../sync/conflicts'
 
 interface AppContextValue {
   state: PersistedAppState
@@ -41,7 +41,7 @@ interface AppContextValue {
   patchSettings: (patch: Partial<PersistedAppState['settings']>) => void
   setFeature: (key: FeatureKey, value: boolean) => void
   replaceState: (state: PersistedAppState) => void
-  acceptExternalState: (state: PersistedAppState) => void
+  acceptExternalState: (state: PersistedAppState, reconcile?: boolean) => void
   upsertVideos: (videos: VideoRef[]) => void
   addSearchHistory: (query: string) => void
   recordProgress: (videoId: string, position: number, duration: number, watchedDelta?: number) => void
@@ -255,7 +255,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   // the focused store actions above. Only trusted restore/sync boundaries may
   // install an already-versioned state without creating another local edit.
   const replaceState = useCallback((next: PersistedAppState) => mutate(() => next), [mutate])
-  const acceptExternalState = useCallback((next: PersistedAppState) => setState(next), [])
+  const acceptExternalState = useCallback((next: PersistedAppState, reconcile = false) => setState((current) => reconcile ? mergeCloudStates(current, next) : next), [])
   const feature = useCallback((key: FeatureKey) => isFeatureRuntimeEnabled(state.settings.features, key), [state.settings.features])
 
   const value = useMemo<AppContextValue>(() => ({

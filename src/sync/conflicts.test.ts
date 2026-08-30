@@ -48,4 +48,21 @@ describe('cloud conflict resolution', () => {
     const prepared = prepareCloudState(state, Date.parse('2026-02-01T00:00:00.000Z'))
     expect(prepared.syncMetadata.removed.savedQueues).toEqual({ recent: '2026-01-15T00:00:00.000Z' })
   })
+
+  it('preserves local mutations made while a cloud request is in flight', () => {
+    const started = createDefaultState()
+    const cloudResult = structuredClone(started)
+    cloudResult.watchLater = ['remote-video']
+    cloudResult.updatedAt = '2026-03-01T00:00:01.000Z'
+    cloudResult.syncMetadata = stampSyncMetadata(started, cloudResult, cloudResult.updatedAt)
+
+    const current = structuredClone(started)
+    current.favorites = ['local-video']
+    current.updatedAt = '2026-03-01T00:00:02.000Z'
+    current.syncMetadata = stampSyncMetadata(started, current, current.updatedAt)
+
+    const reconciled = mergeCloudStates(current, cloudResult)
+    expect(reconciled.favorites).toEqual(['local-video'])
+    expect(reconciled.watchLater).toEqual(['remote-video'])
+  })
 })
