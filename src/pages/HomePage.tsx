@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { VideoCard } from '../components/VideoCard'
 import { rankLocalRecommendations } from '../lib/localRecommendations'
-import { applyAutoAddRules, applyVisibilityRules } from '../lib/videoRules'
+import { applyAutoAddRules, applyRuntimeFeatureRules, applyVisibilityRules } from '../lib/videoRules'
 import { fetchLatestUploads, fetchSubscriptionChannelIds } from '../lib/youtube'
 import { useApp } from '../store/AppStore'
 import { getGoogleAccessToken } from '../sync/supabase'
@@ -14,7 +14,7 @@ export default function HomePage() {
   const [refreshing, setRefreshing] = useState(false)
   const sections = useMemo(() => {
     const hiddenChannels = new Set(app.state.channelPreferences.filter((item) => item.hideFromHome).map((item) => item.channelId))
-    const videos = applyVisibilityRules(Object.values(app.state.videos), app.state.settings).filter((video) => !video.channelId || !hiddenChannels.has(video.channelId))
+    const videos = applyRuntimeFeatureRules(applyVisibilityRules(Object.values(app.state.videos), app.state.settings), { shorts: app.feature('shorts'), live: app.feature('live') }).filter((video) => !video.channelId || !hiddenChannels.has(video.channelId))
     const lookup = (ids: string[]) => ids.map((id) => app.state.videos[id]).filter(Boolean)
     const continuing = Object.values(app.state.history).filter((p) => p.state === 'WATCHING').sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).map((p) => app.state.videos[p.videoId]).filter(Boolean)
     const categoryCounts = new Map<string, number>()
@@ -25,7 +25,7 @@ export default function HomePage() {
     const frequentCategories = new Set([...categoryCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([category]) => category))
     return {
       continue: continuing,
-      inbox: lookup(app.state.inbox),
+      inbox: app.feature('watchInbox') ? lookup(app.state.inbox) : [],
       new: [...videos].filter((v) => v.publishedAt).sort((a, b) => Date.parse(b.publishedAt!) - Date.parse(a.publishedAt!)).slice(0, 12),
       recommended: app.feature('customRecommendation') ? rankLocalRecommendations(videos, app.state).map((item) => item.video) : [],
       categories: videos.filter((video) => Boolean(video.categoryId && frequentCategories.has(video.categoryId))).sort((a, b) => (categoryCounts.get(b.categoryId ?? '') ?? 0) - (categoryCounts.get(a.categoryId ?? '') ?? 0)).slice(0, 12),
@@ -44,12 +44,12 @@ export default function HomePage() {
       const channelIds = [...new Set([...subscribedChannels, ...localChannels])]
       const uploads = channelIds.length ? await fetchLatestUploads(channelIds, accessToken) : []
       if (uploads.length) app.upsertVideos(uploads)
-      const candidates = applyVisibilityRules([...Object.values(app.state.videos), ...uploads], app.state.settings)
+      const candidates = applyRuntimeFeatureRules(applyVisibilityRules([...Object.values(app.state.videos), ...uploads], app.state.settings), { shorts: app.feature('shorts'), live: app.feature('live') })
       const additions = applyAutoAddRules(candidates, app.state.autoAddRules, app.state.queue)
       if (additions.length) app.replaceState({ ...app.state, videos: { ...app.state.videos, ...Object.fromEntries(uploads.map((video) => [video.videoId, video])) }, queue: [...app.state.queue, ...additions], revision: app.state.revision + 1, updatedAt: new Date().toISOString() })
       app.notify(`${uploads.length}本の新着を更新${additions.length ? `・Queueへ${additions.length}本追加` : ''}`, 'success')
     } catch (error) {
-      const candidates = applyVisibilityRules(Object.values(app.state.videos), app.state.settings)
+      const candidates = applyRuntimeFeatureRules(applyVisibilityRules(Object.values(app.state.videos), app.state.settings), { shorts: app.feature('shorts'), live: app.feature('live') })
       const additions = applyAutoAddRules(candidates, app.state.autoAddRules, app.state.queue)
       if (additions.length) app.replaceState({ ...app.state, queue: [...app.state.queue, ...additions], revision: app.state.revision + 1, updatedAt: new Date().toISOString() })
       app.notify(error instanceof Error ? error.message : '新着を更新できませんでした', 'error')

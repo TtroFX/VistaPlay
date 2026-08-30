@@ -29,7 +29,7 @@ export function Sidebar() {
       })}
     </nav>
     <div className="sidebar-spacer" />
-    <NavLink to="/discover" className="nav-item"><Compass /><span>Discover</span></NavLink>
+    {feature('customRecommendation') && <NavLink to="/discover" className="nav-item"><Compass /><span>Discover</span></NavLink>}
     <NavLink to="/settings/features" className="nav-item"><SlidersHorizontal /><span>Features</span></NavLink>
     <button className="nav-item sidebar-expand" onClick={() => setMode('expanded')}><Menu /><span>Expand</span></button>
   </aside>

@@ -56,7 +56,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="compare" element={<FeatureGuard feature="compare"><ComparePage /></FeatureGuard>} />
             <Route path="ai" element={<FeatureGuard feature="chatgpt"><AIPage /></FeatureGuard>} />
             <Route path="statistics" element={<FeatureGuard feature="statistics"><StatisticsPage /></FeatureGuard>} />
-            <Route path="discover" element={<DiscoverPage />} />
+            <Route path="discover" element={<FeatureGuard feature="customRecommendation"><DiscoverPage /></FeatureGuard>} />
             <Route path="share-target" element={<ShareTargetPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>

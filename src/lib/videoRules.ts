@@ -16,6 +16,14 @@ export function applyVisibilityRules(videos: VideoRef[], settings: AppSettings):
   })
 }
 
+export function applyRuntimeFeatureRules(videos: VideoRef[], features: { shorts: boolean; live: boolean }): VideoRef[] {
+  return videos.filter((video) => {
+    if (!features.shorts && isLikelyShort(video)) return false
+    if (!features.live && (video.liveStatus === 'live' || video.liveStatus === 'upcoming')) return false
+    return true
+  })
+}
+
 export function matchesAutoAddRule(video: VideoRef, rule: AutoAddRule, now = Date.now()): boolean {
   if (!rule.enabled || video.available === false) return false
   if (rule.channelId && video.channelId !== rule.channelId) return false
