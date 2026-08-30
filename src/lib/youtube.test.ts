@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { extractChapters, extractTimestamps, fetchLatestUploads, fetchSubscriptionChannelIds, parseDuration, parseYouTubeInput } from './youtube'
+import { extractChapters, extractTimestamps, fetchLatestUploads, fetchPlaylist, fetchSubscriptionChannelIds, parseDuration, parseYouTubeInput } from './youtube'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -34,6 +34,21 @@ describe('YouTube parsing', () => {
     vi.stubGlobal('fetch', fetchMock)
     const result = await fetchLatestUploads(['UC-one'], 'provider-token')
     expect(result).toMatchObject([{ videoId: 'TESTVIDEO01', title: 'Verified upload', durationSeconds: 120 }])
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+  it('loads playlist identity, pagination and verified videos', async () => {
+    vi.stubEnv('VITE_YOUTUBE_API_KEY', 'test-key')
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      if (url.pathname.endsWith('/playlists')) return Promise.resolve(new Response(JSON.stringify({ items: [{ id: 'PL-production', snippet: { title: 'Production playlist', channelId: 'UC-owner', channelTitle: 'Owner', description: 'Playlist description' }, contentDetails: { itemCount: 26 } }] }), { status: 200 }))
+      if (url.pathname.endsWith('/playlistItems')) return Promise.resolve(new Response(JSON.stringify({ items: [{ contentDetails: { videoId: 'PLAYLIST001' } }], nextPageToken: 'page-two' }), { status: 200 }))
+      return Promise.resolve(new Response(JSON.stringify({ items: [{ id: 'PLAYLIST001', snippet: { title: 'Verified playlist video', channelTitle: 'Owner' }, contentDetails: { duration: 'PT3M' } }] }), { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await fetchPlaylist('PL-production')
+    expect(result.playlist).toMatchObject({ title: 'Production playlist', channelId: 'UC-owner', itemCount: 26 })
+    expect(result.items).toMatchObject([{ videoId: 'PLAYLIST001', title: 'Verified playlist video', durationSeconds: 180 }])
+    expect(result.nextPageToken).toBe('page-two')
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })

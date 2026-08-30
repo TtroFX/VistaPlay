@@ -201,6 +201,10 @@ label input:focus, label select:focus, textarea:focus, .inline-form input:focus 
 .entity-result strong, .entity-result small { display: block; }
 .entity-result small { margin-top: 6px; color: var(--muted); }
 .load-more { display: flex; margin: 30px auto; }
+.playlist-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; color: var(--muted); font-size: .88rem; }
+.playlist-meta a, .playlist-meta span { display: inline-flex; align-items: center; gap: 7px; color: inherit; }
+.playlist-meta a:hover { color: var(--accent); }
+.playlist-meta svg { width: 17px; height: 17px; }
 
 .queue-list { display: grid; gap: 8px; }
 .queue-row { display: grid; grid-template-columns: 46px 132px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 9px; border: 1px solid transparent; border-radius: 15px; background: var(--surface); transition: transform var(--standard) var(--ease), border var(--small); }

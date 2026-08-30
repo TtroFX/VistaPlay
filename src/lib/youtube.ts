@@ -252,11 +252,46 @@ export async function listChannelVideos(channelId: string, kind: 'video' | 'live
   return { items: result.valid, nextPageToken: data.nextPageToken }
 }
 
-export async function fetchPlaylist(playlistId: string, pageToken?: string, signal?: AbortSignal): Promise<{ title?: string; items: VideoRef[]; nextPageToken?: string }> {
+export interface PlaylistDetails {
+  playlistId: string
+  title: string
+  description?: string
+  thumbnail?: string
+  channelId?: string
+  channelTitle?: string
+  itemCount?: number
+}
+
+export async function fetchPlaylistDetails(playlistId: string, signal?: AbortSignal): Promise<PlaylistDetails> {
+  const cacheKey = `playlist:${playlistId}`
+  const cached = await cacheGet<PlaylistDetails>(cacheKey)
+  if (cached) return cached.value
+  const data = await apiFetch<{ items?: Array<{ id: string; snippet?: { title?: string; description?: string; channelId?: string; channelTitle?: string; thumbnails?: { high?: { url: string }; medium?: { url: string } } }; contentDetails?: { itemCount?: number } }> }>(
+    'playlists', { part: 'snippet,contentDetails', id: playlistId }, signal,
+  )
+  const item = data.items?.[0]
+  if (!item) throw new Error('Playlist is unavailable')
+  const value: PlaylistDetails = {
+    playlistId: item.id,
+    title: item.snippet?.title ?? 'Playlist',
+    description: item.snippet?.description,
+    thumbnail: item.snippet?.thumbnails?.high?.url ?? item.snippet?.thumbnails?.medium?.url,
+    channelId: item.snippet?.channelId,
+    channelTitle: item.snippet?.channelTitle,
+    itemCount: item.contentDetails?.itemCount,
+  }
+  await cachePut(cacheKey, value, METADATA_TTL)
+  return value
+}
+
+export async function fetchPlaylist(playlistId: string, pageToken?: string, signal?: AbortSignal): Promise<{ playlist: PlaylistDetails; items: VideoRef[]; nextPageToken?: string }> {
   const params: Record<string, string> = { part: 'snippet,contentDetails', playlistId, maxResults: '25' }
   if (pageToken) params.pageToken = pageToken
-  const data = await apiFetch<{ items?: Array<{ contentDetails?: { videoId?: string } }>; nextPageToken?: string }>('playlistItems', params, signal)
+  const [playlist, data] = await Promise.all([
+    fetchPlaylistDetails(playlistId, signal),
+    apiFetch<{ items?: Array<{ contentDetails?: { videoId?: string } }>; nextPageToken?: string }>('playlistItems', params, signal),
+  ])
   const ids = (data.items ?? []).map((item) => item.contentDetails?.videoId).filter(Boolean) as string[]
   const result = await verifyVideoIds(ids, signal)
-  return { items: result.valid, nextPageToken: data.nextPageToken }
+  return { playlist, items: result.valid, nextPageToken: data.nextPageToken }
 }
