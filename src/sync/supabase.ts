@@ -24,6 +24,13 @@ export async function signOutCloud(): Promise<void> {
   if (supabase) await supabase.auth.signOut()
 }
 
+export async function getGoogleAccessToken(): Promise<string | undefined> {
+  const supabase = getSupabase()
+  if (!supabase) return undefined
+  const { data } = await supabase.auth.getSession()
+  return data.session?.provider_token ?? undefined
+}
+
 export async function syncState(local: PersistedAppState): Promise<PersistedAppState> {
   const supabase = getSupabase()
   if (!supabase) throw new Error('Supabase connection is not configured')

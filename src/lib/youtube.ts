@@ -39,15 +39,16 @@ export function parseYouTubeInput(value: string): { type: 'video' | 'channel' | 
   return undefined
 }
 
-async function apiFetch<T>(path: string, params: Record<string, string>, signal?: AbortSignal): Promise<T> {
+async function apiFetch<T>(path: string, params: Record<string, string>, signal?: AbortSignal, accessToken?: string): Promise<T> {
   const key = import.meta.env.VITE_YOUTUBE_API_KEY
-  if (!key) throw new CapabilityError('youtube-api', 'YouTube Data API key is not configured. Direct video URLs remain available.')
+  if (!key && !accessToken) throw new CapabilityError('youtube-api', 'YouTube Data API key is not configured. Direct video URLs remain available.')
   const url = new URL(`${API}/${path}`)
-  Object.entries({ ...params, key }).forEach(([name, value]) => url.searchParams.set(name, value))
+  Object.entries(params).forEach(([name, value]) => url.searchParams.set(name, value))
+  if (!accessToken && key) url.searchParams.set('key', key)
   let lastError: Error | undefined
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      const response = await fetch(url, { signal })
+      const response = await fetch(url, { signal, headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined })
       if (response.ok) return await response.json() as T
       const body = await response.text()
       if (response.status !== 429 && response.status < 500) throw new Error(`YouTube API ${response.status}: ${body.slice(0, 240)}`)
@@ -82,14 +83,14 @@ function mapVideo(item: VideoApiItem): VideoRef {
   }
 }
 
-export async function verifyVideoIds(ids: string[], signal?: AbortSignal): Promise<{ valid: VideoRef[]; invalid: string[] }> {
+export async function verifyVideoIds(ids: string[], signal?: AbortSignal, accessToken?: string): Promise<{ valid: VideoRef[]; invalid: string[] }> {
   const unique = [...new Set(ids)].slice(0, 50)
   if (!unique.length) return { valid: [], invalid: [] }
   const cached = await Promise.all(unique.map(async (id) => (await cacheGet<VideoRef>(`video:${id}`))?.value))
   const metadata = new Map(cached.filter(Boolean).map((video) => [video!.videoId, video!]))
   const missing = unique.filter((id) => !metadata.has(id))
   if (missing.length) {
-    const data = await apiFetch<{ items?: VideoApiItem[] }>('videos', { part: 'snippet,contentDetails,statistics,liveStreamingDetails', id: missing.join(',') }, signal)
+    const data = await apiFetch<{ items?: VideoApiItem[] }>('videos', { part: 'snippet,contentDetails,statistics,liveStreamingDetails', id: missing.join(',') }, signal, accessToken)
     for (const item of (data.items ?? []).map(mapVideo)) {
       metadata.set(item.videoId, item)
       await cachePut(`video:${item.videoId}`, item, item.liveStatus === 'live' || item.liveStatus === 'upcoming' ? LIVE_METADATA_TTL : METADATA_TTL)
@@ -98,6 +99,38 @@ export async function verifyVideoIds(ids: string[], signal?: AbortSignal): Promi
   const valid = unique.map((id) => metadata.get(id)).filter(Boolean) as VideoRef[]
   const found = new Set(valid.map((item) => item.videoId))
   return { valid, invalid: unique.filter((id) => !found.has(id)) }
+}
+
+export async function fetchSubscriptionChannelIds(accessToken: string, signal?: AbortSignal): Promise<string[]> {
+  const channels: string[] = []
+  let pageToken: string | undefined
+  do {
+    const params: Record<string, string> = { part: 'snippet', mine: 'true', maxResults: '50' }
+    if (pageToken) params.pageToken = pageToken
+    const data = await apiFetch<{ items?: Array<{ snippet?: { resourceId?: { channelId?: string } } }>; nextPageToken?: string }>('subscriptions', params, signal, accessToken)
+    channels.push(...(data.items ?? []).map((item) => item.snippet?.resourceId?.channelId).filter(Boolean) as string[])
+    pageToken = data.nextPageToken
+  } while (pageToken && channels.length < 100)
+  return [...new Set(channels)].slice(0, 100)
+}
+
+export async function fetchLatestUploads(channelIds: string[], accessToken?: string, signal?: AbortSignal): Promise<VideoRef[]> {
+  const uniqueChannels = [...new Set(channelIds)].filter(Boolean).slice(0, 25)
+  if (!uniqueChannels.length) return []
+  const channels = await apiFetch<{ items?: Array<{ contentDetails?: { relatedPlaylists?: { uploads?: string } } }> }>(
+    'channels', { part: 'contentDetails', id: uniqueChannels.join(',') }, signal, accessToken,
+  )
+  const playlists = (channels.items ?? []).map((item) => item.contentDetails?.relatedPlaylists?.uploads).filter(Boolean) as string[]
+  const videoIds: string[] = []
+  for (let offset = 0; offset < playlists.length; offset += 5) {
+    const batch = playlists.slice(offset, offset + 5)
+    const pages = await Promise.all(batch.map((playlistId) => apiFetch<{ items?: Array<{ contentDetails?: { videoId?: string } }> }>(
+      'playlistItems', { part: 'contentDetails', playlistId, maxResults: '3' }, signal, accessToken,
+    )))
+    for (const page of pages) videoIds.push(...(page.items ?? []).map((item) => item.contentDetails?.videoId).filter(Boolean) as string[])
+  }
+  const verified = await verifyVideoIds(videoIds, signal, accessToken)
+  return verified.valid.sort((a, b) => Date.parse(b.publishedAt ?? '0') - Date.parse(a.publishedAt ?? '0'))
 }
 
 export async function searchRemote(query: string, filters: SearchFilters, pageToken?: string, signal?: AbortSignal): Promise<{ items: SearchResult[]; nextPageToken?: string }> {

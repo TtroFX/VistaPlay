@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { extractChapters, extractTimestamps, parseDuration, parseYouTubeInput } from './youtube'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { extractChapters, extractTimestamps, fetchLatestUploads, fetchSubscriptionChannelIds, parseDuration, parseYouTubeInput } from './youtube'
+
+afterEach(() => vi.unstubAllGlobals())
 
 describe('YouTube parsing', () => {
   it('recognizes video, channel and playlist links', () => {
@@ -14,5 +16,21 @@ describe('YouTube parsing', () => {
   })
   it('sorts and deduplicates description chapters', () => {
     expect(extractChapters('1:00 Middle\n0:00 Start\n1:00 Duplicate', 120)).toEqual([{ start: 0, title: 'Start' }, { start: 60, title: 'Duplicate' }])
+  })
+  it('loads Google subscriptions with a bearer token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [{ snippet: { resourceId: { channelId: 'UC-one' } } }, { snippet: { resourceId: { channelId: 'UC-two' } } }] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(fetchSubscriptionChannelIds('provider-token')).resolves.toEqual(['UC-one', 'UC-two'])
+    expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ Authorization: 'Bearer provider-token' })
+  })
+  it('resolves upload playlists and verifies their video metadata', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ contentDetails: { relatedPlaylists: { uploads: 'UU-one' } } }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ contentDetails: { videoId: 'TESTVIDEO01' } }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ id: 'TESTVIDEO01', snippet: { title: 'Verified upload', publishedAt: '2026-01-02T00:00:00Z' }, contentDetails: { duration: 'PT2M' } }] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await fetchLatestUploads(['UC-one'], 'provider-token')
+    expect(result).toMatchObject([{ videoId: 'TESTVIDEO01', title: 'Verified upload', durationSeconds: 120 }])
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })
