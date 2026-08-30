@@ -131,6 +131,7 @@ export function PersistentPlayer() {
   function flushProgress() {
     const active = session.current
     if (!active || active.pendingWatchSeconds <= 0) return
+    if (!latest.current.app.state.history[active.videoId] && active.real < 10) return
     latest.current.app.recordProgress(active.videoId, active.lastPosition, active.duration, active.pendingWatchSeconds)
     active.pendingWatchSeconds = 0
   }

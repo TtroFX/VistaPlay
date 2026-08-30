@@ -1,4 +1,4 @@
-import { Clock3, FolderPlus, GitCompareArrows, Heart, Inbox, ListEnd, MoreHorizontal, Play, Plus, UserRound, X } from 'lucide-react'
+import { Clock3, EyeOff, FolderPlus, GitCompareArrows, Heart, Inbox, ListEnd, MoreHorizontal, Play, Plus, UserRound, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { VideoRef } from '../domain/types'
@@ -9,12 +9,14 @@ export function VideoCard({ video, compact = false }: { video: VideoRef; compact
   const app = useApp()
   const navigate = useNavigate()
   const [menu, setMenu] = useState(false)
+  const [pressing, setPressing] = useState(false)
   const timer = useRef<number>(undefined)
-  const open = () => { app.playVideo(video); navigate(`/watch?v=${video.videoId}`) }
-  const onPointerDown = () => { timer.current = window.setTimeout(() => setMenu(true), 480) }
-  const clear = () => window.clearTimeout(timer.current)
+  const longPressed = useRef(false)
+  const open = () => { if (longPressed.current) { longPressed.current = false; return } app.playVideo(video); navigate(`/watch?v=${video.videoId}`) }
+  const onPointerDown = () => { longPressed.current = false; setPressing(true); timer.current = window.setTimeout(() => { longPressed.current = true; setPressing(false); setMenu(true) }, 480) }
+  const clear = () => { window.clearTimeout(timer.current); setPressing(false) }
   const action = (handler: () => void) => { handler(); setMenu(false) }
-  return <article className={`video-card ${compact ? 'video-card-compact' : ''}`} onPointerDown={onPointerDown} onPointerUp={clear} onPointerCancel={clear}>
+  return <article className={`video-card ${compact ? 'video-card-compact' : ''} ${pressing ? 'long-pressing' : ''}`} onPointerDown={onPointerDown} onPointerUp={clear} onPointerCancel={clear}>
     <button className="thumbnail-button" onClick={open} aria-label={`${video.title}を再生`}>
       <img src={video.thumbnail ?? `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`} alt="" loading="lazy" />
       <span className="duration-badge">{video.liveStatus === 'live' ? 'LIVE' : formatDuration(video.durationSeconds)}</span>
@@ -31,7 +33,8 @@ export function VideoCard({ video, compact = false }: { video: VideoRef; compact
       <button onClick={() => action(() => app.toggleWatchLater(video))}><Clock3 />後で見る</button>
       <button onClick={() => action(() => app.toggleFavorite(video))}><Heart />お気に入り</button>
       {app.feature('watchInbox') && <button onClick={() => action(() => app.toggleInbox(video))}><Inbox />Inbox</button>}
-      <button onClick={() => { setMenu(false); navigate(`/library?organize=${video.videoId}`) }}><FolderPlus />Folder / Tags</button>
+      <button onClick={() => { setMenu(false); navigate(`/library?organize=${video.videoId}`) }}><FolderPlus />{app.feature('tags') ? 'Folder / Tags' : 'Folder'}</button>
+      <button onClick={() => action(() => app.hideVideo(video.videoId))}><EyeOff />非表示</button>
       {video.channelId && <button onClick={() => { setMenu(false); navigate(`/channel/${video.channelId}`) }}><UserRound />Channelを開く</button>}
       {app.feature('compare') && <button onClick={() => { setMenu(false); navigate(`/compare?a=${video.videoId}`) }}><GitCompareArrows />比較に追加</button>}
       <button onClick={() => setMenu(false)}><X />閉じる</button>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { countsAsWatched, isCompleted, resolvePlaybackEndAction, resolvePlaybackRate } from './playerMath'
+import { countsAsWatched, isCompleted, resolvePlaybackEndAction, resolvePlaybackRate, shouldPersistProgress } from './playerMath'
 
 describe('player rules', () => {
   it('chooses the slower rate on an equal-distance tie', () => {
@@ -12,6 +12,11 @@ describe('player rules', () => {
   it('counts a short video after the defined threshold', () => {
     expect(countsAsWatched(5, 20)).toBe(true)
     expect(countsAsWatched(4.9, 20)).toBe(false)
+  })
+  it('does not persist a new progress entry before ten playing seconds', () => {
+    expect(shouldPersistProgress(false, 9.99)).toBe(false)
+    expect(shouldPersistProgress(false, 10)).toBe(true)
+    expect(shouldPersistProgress(true, 1)).toBe(true)
   })
   it('resolves end behavior in repeat, queue, stop priority order', () => {
     expect(resolvePlaybackEndAction(true, 2, true)).toBe('repeat')

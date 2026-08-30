@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { createDefaultState, isFeatureRuntimeEnabled } from '../config/features'
 import { loadAppState, saveAppState, saveWatchSession } from '../data/repository'
 import type { FeatureKey, PersistedAppState, QueueItem, SavedQueue, ToastMessage, VideoRef, WatchProgress, WatchSession } from '../domain/types'
-import { isCompleted } from '../lib/playerMath'
+import { isCompleted, shouldPersistProgress } from '../lib/playerMath'
 import { recordDiagnostic } from '../lib/diagnostics'
 import { playerEngine, type PlayerSnapshot } from '../player/PlayerEngine'
 import { stampSyncMetadata } from '../sync/conflicts'
@@ -30,6 +30,8 @@ interface AppContextValue {
   toggleWatchLater: (video: VideoRef) => void
   toggleInbox: (video: VideoRef) => void
   archiveVideo: (videoId: string) => void
+  resetProgress: (videoId: string) => void
+  hideVideo: (videoId: string) => void
   addFolder: (name: string, parentId?: string) => void
   toggleFolderVideo: (folderId: string, videoId: string) => void
   addTag: (display: string, videoId: string, color?: string) => void
@@ -200,6 +202,19 @@ export function AppProvider({ children }: PropsWithChildren) {
       return { ...current, history }
     }))
   }, [mutate, notify, state.history])
+  const resetProgress = useCallback((videoId: string) => {
+    mutate((current) => {
+      const history = { ...current.history }
+      delete history[videoId]
+      return { ...current, history, lastPlayer: current.lastPlayer?.videoId === videoId ? { ...current.lastPlayer, position: 0, updatedAt: new Date().toISOString() } : current.lastPlayer }
+    })
+    notify('視聴状態をResetしました', 'success')
+  }, [mutate, notify])
+  const hideVideo = useCallback((videoId: string) => {
+    if (state.settings.blacklist.videos.includes(videoId)) return
+    mutate((current) => ({ ...current, settings: { ...current.settings, blacklist: { ...current.settings.blacklist, videos: [...current.settings.blacklist.videos, videoId] }, updatedAt: new Date().toISOString() } }))
+    notify('Home・Search・Recommendationから非表示にしました', 'default', () => mutate((current) => ({ ...current, settings: { ...current.settings, blacklist: { ...current.settings.blacklist, videos: current.settings.blacklist.videos.filter((id) => id !== videoId) }, updatedAt: new Date().toISOString() } })))
+  }, [mutate, notify, state.settings.blacklist.videos])
   const addFolder = useCallback((name: string, parentId?: string) => mutate((current) => ({ ...current, folders: name.trim() && (!parentId || !current.folders.find((folder) => folder.id === parentId)?.parentId) ? [...current.folders, { id: crypto.randomUUID(), name: name.trim(), parentId, videoIds: [], pinned: false, updatedAt: new Date().toISOString() }] : current.folders })), [mutate])
   const toggleFolderVideo = useCallback((folderId: string, videoId: string) => mutate((current) => ({ ...current, folders: current.folders.map((folder) => folder.id === folderId ? { ...folder, videoIds: folder.videoIds.includes(videoId) ? folder.videoIds.filter((id) => id !== videoId) : [...folder.videoIds, videoId], updatedAt: new Date().toISOString() } : folder) })), [mutate])
   const addTag = useCallback((display: string, videoId: string, color?: string) => mutate((current) => {
@@ -229,6 +244,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const recordProgress = useCallback((videoId: string, position: number, duration: number, watchedDelta = 0) => mutate((current) => {
     const previous = current.history[videoId]
     const watchedSeconds = (previous?.watchedSeconds ?? 0) + Math.max(0, watchedDelta)
+    if (!shouldPersistProgress(Boolean(previous), watchedSeconds)) return { ...current, lastPlayer: { videoId, position, updatedAt: new Date().toISOString() } }
     const completed = previous?.state === 'COMPLETED' || isCompleted(position, duration, watchedSeconds)
     const progress: WatchProgress = { videoId, position: completed ? 0 : position, duration, watchedSeconds, state: completed ? 'COMPLETED' : watchedSeconds >= 10 ? 'WATCHING' : previous?.state ?? 'UNWATCHED', updatedAt: new Date().toISOString() }
     return { ...current, history: { ...current.history, [videoId]: progress }, inbox: watchedSeconds >= 30 ? current.inbox.filter((id) => id !== videoId) : current.inbox, lastPlayer: { videoId, position: progress.position, updatedAt: progress.updatedAt } }
@@ -244,10 +260,10 @@ export function AppProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<AppContextValue>(() => ({
     state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext,
-    saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, addFolder, toggleFolderVideo,
+    saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, resetProgress, hideVideo, addFolder, toggleFolderVideo,
     addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, recordProgress, recordSession, notify,
     addSearchHistory, dismissToast: (id) => setToasts((items) => items.filter((item) => item.id !== id))
-  }), [state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext, saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, addFolder, toggleFolderVideo, addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, addSearchHistory, recordProgress, recordSession, notify])
+  }), [state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext, saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, resetProgress, hideVideo, addFolder, toggleFolderVideo, addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, addSearchHistory, recordProgress, recordSession, notify])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
