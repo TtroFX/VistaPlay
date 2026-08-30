@@ -19,6 +19,7 @@ interface AppContextValue {
   playVideo: (video: VideoRef, position?: number) => void
   closePlayer: () => void
   addQueue: (video: VideoRef, next?: boolean) => void
+  applyRefreshResults: (videos: VideoRef[], additions: QueueItem[]) => void
   removeQueue: (id: string) => void
   reorderQueue: (from: number, to: number) => void
   shuffleQueue: () => void
@@ -133,6 +134,12 @@ export function AppProvider({ children }: PropsWithChildren) {
     })
     notify(next ? '次に再生へ追加しました' : 'Queueへ追加しました', 'success')
   }, [mutate, notify])
+
+  const applyRefreshResults = useCallback((videos: VideoRef[], additions: QueueItem[]) => mutate((current) => ({
+    ...current,
+    videos: { ...current.videos, ...Object.fromEntries(videos.map((video) => [video.videoId, { ...current.videos[video.videoId], ...video }])) },
+    queue: uniqueQueue([...current.queue, ...additions]),
+  })), [mutate])
 
   const removeQueue = useCallback((id: string) => {
     const removed = state.queue.find((item) => item.id === id)
@@ -266,11 +273,11 @@ export function AppProvider({ children }: PropsWithChildren) {
   const feature = useCallback((key: FeatureKey) => isFeatureRuntimeEnabled(state.settings.features, key), [state.settings.features])
 
   const value = useMemo<AppContextValue>(() => ({
-    state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext,
+    state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, applyRefreshResults, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext,
     saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, resetProgress, hideVideo, addFolder, toggleFolderVideo,
     addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, recordAIImport, recordProgress, recordSession, notify,
     addSearchHistory, dismissToast: (id) => setToasts((items) => items.filter((item) => item.id !== id))
-  }), [state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext, saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, resetProgress, hideVideo, addFolder, toggleFolderVideo, addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, addSearchHistory, recordAIImport, recordProgress, recordSession, notify])
+  }), [state, hydrated, online, currentVideo, player, toasts, feature, playVideo, closePlayer, addQueue, applyRefreshResults, removeQueue, reorderQueue, shuffleQueue, playQueueItem, playNext, saveQueue, loadSavedQueue, deleteSavedQueue, toggleFavorite, toggleWatchLater, toggleInbox, archiveVideo, resetProgress, hideVideo, addFolder, toggleFolderVideo, addTag, removeTag, saveNote, setVideoRate, patchSettings, setFeature, replaceState, acceptExternalState, upsertVideos, addSearchHistory, recordAIImport, recordProgress, recordSession, notify])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

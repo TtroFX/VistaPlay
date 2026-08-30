@@ -43,15 +43,14 @@ export default function HomePage() {
       const subscribedChannels = accessToken ? await fetchSubscriptionChannelIds(accessToken) : []
       const channelIds = [...new Set([...subscribedChannels, ...localChannels])]
       const uploads = channelIds.length ? await fetchLatestUploads(channelIds, accessToken) : []
-      if (uploads.length) app.upsertVideos(uploads)
       const candidates = applyRuntimeFeatureRules(applyVisibilityRules([...Object.values(app.state.videos), ...uploads], app.state.settings), { shorts: app.feature('shorts'), live: app.feature('live') })
       const additions = applyAutoAddRules(candidates, app.state.autoAddRules, app.state.queue)
-      if (additions.length) app.replaceState({ ...app.state, videos: { ...app.state.videos, ...Object.fromEntries(uploads.map((video) => [video.videoId, video])) }, queue: [...app.state.queue, ...additions], revision: app.state.revision + 1, updatedAt: new Date().toISOString() })
+      if (uploads.length || additions.length) app.applyRefreshResults(uploads, additions)
       app.notify(`${uploads.length}本の新着を更新${additions.length ? `・Queueへ${additions.length}本追加` : ''}`, 'success')
     } catch (error) {
       const candidates = applyRuntimeFeatureRules(applyVisibilityRules(Object.values(app.state.videos), app.state.settings), { shorts: app.feature('shorts'), live: app.feature('live') })
       const additions = applyAutoAddRules(candidates, app.state.autoAddRules, app.state.queue)
-      if (additions.length) app.replaceState({ ...app.state, queue: [...app.state.queue, ...additions], revision: app.state.revision + 1, updatedAt: new Date().toISOString() })
+      if (additions.length) app.applyRefreshResults([], additions)
       app.notify(error instanceof Error ? error.message : '新着を更新できませんでした', 'error')
     } finally {
       setRefreshing(false)
