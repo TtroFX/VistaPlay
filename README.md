@@ -21,6 +21,8 @@ npm test
 npm run build
 ```
 
+GitHub Actions runs the same clean-install gate on `feature/production-v1`, `main`, and pull requests. Vercel deployment uses the checked-in SPA rewrite so direct `/watch`, `/channel`, `/playlist`, and Share Target navigation resolve to the React application while static PWA files retain their explicit cache headers.
+
 ## Configuration
 
 - `VITE_YOUTUBE_API_KEY`: browser API key restricted to the deployed origins and YouTube Data API v3.
