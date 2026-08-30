@@ -6,6 +6,7 @@ import { VideoCard } from '../components/VideoCard'
 import type { SearchFilters, SearchResult } from '../domain/types'
 import { parseSmartSearch, type SmartSearchImport } from '../lib/aiBridge'
 import { filterAndSortSearchResults, type SearchSort } from '../lib/searchRules'
+import { useTemporaryHistory } from '../lib/useTemporaryHistory'
 import { CapabilityError, parseYouTubeInput, searchRemote } from '../lib/youtube'
 import { useApp } from '../store/AppStore'
 
@@ -37,6 +38,7 @@ export default function SearchPage() {
   const [error, setError] = useState('')
   const [smartSummary, setSmartSummary] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const dismissFilters = useTemporaryHistory(showFilters, () => setShowFilters(false), 'search-filters')
   const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: 0 })
   latest.current = { query, filters, results, next, sort, scroll: window.scrollY }
   useEffect(() => { window.scrollTo(0, canRestore ? restored.current?.scroll ?? 0 : 0); return () => sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: window.scrollY })) }, [])
@@ -107,7 +109,7 @@ export default function SearchPage() {
       <div className="large-search"><Search /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="検索語、YouTube URL、Video ID" /><button type="button" className="icon-button" onClick={() => setQuery('')} aria-label="入力を消去"><X /></button><button className="primary-button">検索</button></div>
       <div className="filter-bar">
         {(['video', 'channel', 'playlist'] as const).map((type) => <button type="button" className={`filter-chip ${filters.type === type ? 'active' : ''}`} onClick={() => setFilters({ ...filters, type })} key={type}>{type === 'video' ? <Play /> : type === 'channel' ? <UserRound /> : <ListPlus />}{type}</button>)}
-        {app.feature('advancedSearch') && <button type="button" className={`filter-chip ${showFilters ? 'active' : ''}`} onClick={() => setShowFilters((value) => !value)}><SlidersHorizontal />詳細Filter</button>}
+        {app.feature('advancedSearch') && <button type="button" className={`filter-chip ${showFilters ? 'active' : ''}`} onClick={() => showFilters ? dismissFilters() : setShowFilters(true)}><SlidersHorizontal />詳細Filter</button>}
         {filters.type === 'video' && <label className="inline-select">並び順<select value={sort} onChange={(event) => setSort(event.target.value as SearchSort)}><option value="relevance">関連度</option><option value="newest">新しい順</option><option value="views">再生数順</option></select></label>}
       </div>
       {showFilters && app.feature('advancedSearch') && <div className="advanced-filters">

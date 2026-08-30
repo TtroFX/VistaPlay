@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { fetchComments, extractChapters, extractTimestamps, verifyVideoIds, type YouTubeCommentsResponse } from '../lib/youtube'
 import { fetchSponsorSegments, type SponsorSegment } from '../lib/sponsorBlock'
 import { formatDuration } from '../lib/time'
+import { useTemporaryHistory } from '../lib/useTemporaryHistory'
 import { playerEngine } from '../player/PlayerEngine'
 import { useApp } from '../store/AppStore'
 
@@ -22,6 +23,7 @@ export default function WatchPage() {
   const [tab, setTab] = useState<WatchTab>(app.state.settings.layout.defaultWatchTab as WatchTab)
   const [comments, setComments] = useState<CommentView[]>([]); const [commentNext, setCommentNext] = useState<string>(); const [commentLoading, setCommentLoading] = useState(false); const [commentError, setCommentError] = useState(''); const [commentKeyword, setCommentKeyword] = useState(''); const [commentUsername, setCommentUsername] = useState(''); const [commentHasTimestamp, setCommentHasTimestamp] = useState(false); const [commentHasReplies, setCommentHasReplies] = useState(false); const [commentOrder, setCommentOrder] = useState<'relevance' | 'time'>('relevance')
   const [sponsors, setSponsors] = useState<SponsorSegment[]>([]); const [descriptionOpen, setDescriptionOpen] = useState(false)
+  const dismissDescription = useTemporaryHistory(descriptionOpen, () => setDescriptionOpen(false), 'watch-description')
   const video = videoId ? app.state.videos[videoId] ?? (app.currentVideo?.videoId === videoId ? app.currentVideo : undefined) : undefined
   const chapters = useMemo(() => extractChapters(video?.description ?? '', video?.durationSeconds), [video?.description, video?.durationSeconds])
   const focusMode = app.state.settings.layout.focusMode
@@ -78,7 +80,7 @@ export default function WatchPage() {
           </>}
         </div>
         {!focusMode && sponsors.length > 0 && <div className="sponsor-actions"><span><SkipForward />SponsorBlock（自動Skip OFF）</span>{sponsors.map((segment, index) => <button key={`${segment.segment[0]}-${index}`} onClick={() => playerEngine.seekTo(segment.segment[1])}>{segment.category} {formatDuration(segment.segment[0])} → Skip</button>)}</div>}
-        {!focusMode && shown.description && <div className={`description-panel ${descriptionOpen ? 'open' : ''}`}><p>{shown.description}</p><button onClick={() => setDescriptionOpen((value) => !value)}>{descriptionOpen ? '閉じる' : 'もっと見る'}<ChevronDown /></button></div>}
+        {!focusMode && shown.description && <div className={`description-panel ${descriptionOpen ? 'open' : ''}`}><p>{shown.description}</p><button onClick={() => descriptionOpen ? dismissDescription() : setDescriptionOpen(true)}>{descriptionOpen ? '閉じる' : 'もっと見る'}<ChevronDown /></button></div>}
       </section>
       {paneVisible && <aside className="watch-pane" style={{ width: app.state.settings.layout.rightPaneWidth }}><div className="pane-tabs" role="tablist">{tabs.map(([key, label, Icon]) => <button role="tab" aria-selected={tab === key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)} key={key}><Icon />{label}</button>)}</div><div className="pane-content">
         {tab === 'queue' && <div className="pane-queue">{app.state.queue.length ? app.state.queue.map((item, index) => <button key={item.id} onClick={() => { app.playQueueItem(item.id); navigate(`/watch?v=${item.video.videoId}`) }}><span>{index + 1}</span><img src={item.video.thumbnail} alt="" /><strong>{item.video.title}</strong></button>) : <p className="pane-empty">Queueは空です</p>}</div>}
