@@ -38,55 +38,73 @@ export default function SearchPage() {
   const [error, setError] = useState('')
   const [smartSummary, setSmartSummary] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const searchRequest = useRef<AbortController | undefined>(undefined)
+  const searchGeneration = useRef(0)
   const dismissFilters = useTemporaryHistory(showFilters, () => setShowFilters(false), 'search-filters')
   const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: 0 })
   latest.current = { query, filters, results, next, sort, scroll: window.scrollY }
   useEffect(() => { window.scrollTo(0, canRestore ? restored.current?.scroll ?? 0 : 0); return () => sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: window.scrollY })) }, [])
   useEffect(() => { if (smartSearch) void runSmartSearch(smartSearch); else if (params.get('q') && !results.length) void runSearch(false) }, [])
+  useEffect(() => () => searchRequest.current?.abort(), [])
+
+  function beginSearchRequest() {
+    searchRequest.current?.abort()
+    const controller = new AbortController()
+    searchRequest.current = controller
+    return { controller, generation: ++searchGeneration.current }
+  }
 
   async function runSmartSearch(document: SmartSearchImport) {
+    const { controller, generation } = beginSearchRequest()
     setLoading(true); setError(''); setNext(undefined); setParams({ q: document.searches[0].query })
     const combined: SearchResult[] = []
     let failures = 0
     let firstFailure = ''
-    for (let offset = 0; offset < document.searches.length; offset += 3) {
-      const outcomes = await Promise.all(document.searches.slice(offset, offset + 3).map(async (search) => {
-        const shortsAllowed = app.feature('shorts') && search.filters?.shorts !== false
-        const liveAllowed = app.feature('live') && search.filters?.live !== false
-        const smartFilters: SearchFilters = { ...defaults, shorts: shortsAllowed ? 'include' : 'exclude' }
-        try {
-          const response = await searchRemote(search.query, smartFilters)
-          return { search, items: filterAndSortSearchResults(response.items, app.state.settings, { shorts: shortsAllowed, live: liveAllowed, whitelistOnly: false, sort }) }
-        } catch (reason) { return { search, reason } }
-      }))
-      for (const outcome of outcomes) {
-        if (outcome.items !== undefined) {
-          combined.push(...outcome.items)
-          app.addSearchHistory(outcome.search.query)
-        } else {
-          failures += 1
-          if (!firstFailure) firstFailure = outcome.reason instanceof Error ? outcome.reason.message : 'Smart Search query failed'
+    try {
+      for (let offset = 0; offset < document.searches.length; offset += 3) {
+        const outcomes = await Promise.all(document.searches.slice(offset, offset + 3).map(async (search) => {
+          const shortsAllowed = app.feature('shorts') && search.filters?.shorts !== false
+          const liveAllowed = app.feature('live') && search.filters?.live !== false
+          const smartFilters: SearchFilters = { ...defaults, shorts: shortsAllowed ? 'include' : 'exclude' }
+          try {
+            const response = await searchRemote(search.query, smartFilters, undefined, controller.signal)
+            return { search, items: filterAndSortSearchResults(response.items, app.state.settings, { shorts: shortsAllowed, live: liveAllowed, whitelistOnly: false, sort }) }
+          } catch (reason) { return { search, reason } }
+        }))
+        if (controller.signal.aborted || searchGeneration.current !== generation) return
+        for (const outcome of outcomes) {
+          if (outcome.items !== undefined) {
+            combined.push(...outcome.items)
+            app.addSearchHistory(outcome.search.query)
+          } else {
+            failures += 1
+            if (!firstFailure) firstFailure = outcome.reason instanceof Error ? outcome.reason.message : 'Smart Search query failed'
+          }
         }
       }
+      if (searchGeneration.current !== generation) return
+      const deduped = [...new Map(combined.map((item) => [`${item.type}:${item.id}`, item])).values()]
+      setResults(deduped)
+      app.upsertVideos(deduped.map((item) => item.video).filter(Boolean) as NonNullable<SearchResult['video']>[])
+      setSmartSummary(`${document.searches.length} queriesから${deduped.length}件を統合${failures ? `（${failures}件失敗）` : ''}`)
+      if (!deduped.length && failures) setError(firstFailure)
+    } finally {
+      if (searchGeneration.current === generation) setLoading(false)
     }
-    const deduped = [...new Map(combined.map((item) => [`${item.type}:${item.id}`, item])).values()]
-    setResults(deduped)
-    app.upsertVideos(deduped.map((item) => item.video).filter(Boolean) as NonNullable<SearchResult['video']>[])
-    setSmartSummary(`${document.searches.length} queriesから${deduped.length}件を統合${failures ? `（${failures}件失敗）` : ''}`)
-    if (!deduped.length && failures) setError(firstFailure)
-    setLoading(false)
   }
 
   async function runSearch(append: boolean, event?: FormEvent) {
     event?.preventDefault(); if (!query.trim()) return
     const parsed = parseYouTubeInput(query)
-    if (parsed) { navigate(parsed.type === 'video' ? `/watch?v=${parsed.id}` : parsed.type === 'channel' ? `/channel/${parsed.id}` : `/playlist/${parsed.id}`); return }
+    if (parsed) { searchRequest.current?.abort(); navigate(parsed.type === 'video' ? `/watch?v=${parsed.id}` : parsed.type === 'channel' ? `/channel/${parsed.id}` : `/playlist/${parsed.id}`); return }
+    const { controller, generation } = beginSearchRequest()
     setLoading(true); setError(''); setParams({ q: query.trim() })
     try {
       const effectiveFilters = app.feature('advancedSearch') ? { ...filters } : { ...defaults, type: filters.type }
       if (!app.feature('shorts')) effectiveFilters.shorts = 'exclude'
       if (!app.feature('live')) effectiveFilters.live = 'any'
-      const response = await searchRemote(query.trim(), effectiveFilters, append ? next : undefined)
+      const response = await searchRemote(query.trim(), effectiveFilters, append ? next : undefined, controller.signal)
+      if (searchGeneration.current !== generation) return
       const combined = append ? [...results, ...response.items] : response.items
       const visible = filterAndSortSearchResults(combined, app.state.settings, { shorts: app.feature('shorts'), live: app.feature('live'), whitelistOnly: effectiveFilters.whitelistOnly, sort })
       const deduped = [...new Map(visible.map((item) => [`${item.type}:${item.id}`, item])).values()]
@@ -94,8 +112,11 @@ export default function SearchPage() {
       setNext(response.nextPageToken)
       app.addSearchHistory(query.trim())
       app.upsertVideos(deduped.map((item) => item.video).filter(Boolean) as NonNullable<SearchResult['video']>[])
-    } catch (reason) { setError(reason instanceof CapabilityError ? reason.message : reason instanceof Error ? reason.message : '検索に失敗しました') }
-    finally { setLoading(false) }
+    } catch (reason) {
+      if (!controller.signal.aborted && searchGeneration.current === generation) setError(reason instanceof CapabilityError ? reason.message : reason instanceof Error ? reason.message : '検索に失敗しました')
+    } finally {
+      if (searchGeneration.current === generation) setLoading(false)
+    }
   }
 
   function openResult(result: SearchResult) {
