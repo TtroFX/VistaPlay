@@ -242,9 +242,9 @@ export async function fetchChannel(channelId: string, signal?: AbortSignal): Pro
   return value
 }
 
-export async function listChannelVideos(channelId: string, kind: 'video' | 'live' = 'video', pageToken?: string, signal?: AbortSignal): Promise<{ items: VideoRef[]; nextPageToken?: string }> {
+export async function listChannelVideos(channelId: string, kind: 'video' | 'live' | 'upcoming' = 'video', pageToken?: string, signal?: AbortSignal): Promise<{ items: VideoRef[]; nextPageToken?: string }> {
   const params: Record<string, string> = { part: 'snippet', channelId, type: 'video', maxResults: '25', order: 'date' }
-  if (kind === 'live') params.eventType = 'live'
+  if (kind !== 'video') params.eventType = kind
   if (pageToken) params.pageToken = pageToken
   const data = await apiFetch<{ items?: Array<{ id: { videoId?: string } }>; nextPageToken?: string }>('search', params, signal)
   const ids = (data.items ?? []).map((item) => item.id.videoId).filter(Boolean) as string[]

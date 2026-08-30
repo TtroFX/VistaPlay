@@ -44,11 +44,11 @@ export default function WatchPage() {
     const controller = new AbortController(); fetchSponsorSegments(videoId, controller.signal).then(setSponsors).catch(() => setSponsors([])); return () => controller.abort()
   }, [app.feature, videoId])
 
-  useEffect(() => { if (tab === 'comments' && !comments.length) void loadComments(false) }, [tab, commentOrder])
+  useEffect(() => { if (app.feature('comments') && tab === 'comments' && !comments.length) void loadComments(false) }, [tab, commentOrder, app.feature])
   useEffect(() => { if (!tabs.some(([key]) => key === tab)) setTab('queue') }, [availableTabKeys, tab])
 
   async function loadComments(append: boolean) {
-    if (!videoId || commentLoading || comments.length >= 200) return
+    if (!app.feature('comments') || !videoId || commentLoading || comments.length >= 200) return
     setCommentLoading(true); setCommentError('')
     try { const data = await fetchComments(videoId, append ? commentNext : undefined, commentOrder); const mapped = mapComments(data); setComments((items) => append ? [...items, ...mapped].slice(0, 200) : mapped); setCommentNext(data.nextPageToken) }
     catch (error) { setCommentError(error instanceof Error ? error.message : 'Comments unavailable') }
