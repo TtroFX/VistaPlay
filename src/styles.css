@@ -174,7 +174,7 @@ svg { width: 20px; height: 20px; flex: 0 0 auto; }
 .advanced-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; padding-top: 16px; animation: panel-in var(--panel) var(--ease); }
 @keyframes panel-in { from { opacity: 0; transform: translateY(-7px); } }
 label { color: var(--muted); font-size: 13px; }
-label input, label select, .inline-form input, .smart-builder input, .smart-builder select, .compare-picker input, .comment-toolbar input, .comment-toolbar select { width: 100%; min-height: 46px; margin-top: 6px; padding: 0 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--bg); outline: 0; transition: border var(--small), box-shadow var(--small); }
+label input, label select, .inline-form input, .inline-form select, .smart-builder input, .smart-builder select, .compare-picker input, .comment-toolbar input, .comment-toolbar select { width: 100%; min-height: 46px; margin-top: 6px; padding: 0 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--bg); outline: 0; transition: border var(--small), box-shadow var(--small); }
 label input:focus, label select:focus, textarea:focus, .inline-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
 .capability-notice { display: flex; align-items: flex-start; gap: 14px; margin: 20px 0; padding: 18px; border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border)); border-radius: 14px; background: color-mix(in srgb, var(--warning) 7%, var(--surface)); color: var(--warning); }
 .capability-notice p { margin: 4px 0; color: inherit; }
@@ -288,6 +288,16 @@ label input:focus, label select:focus, textarea:focus, .inline-form input:focus 
 .modal-heading img { border-radius: 12px; }
 .choice-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .choice-list label { min-height: 44px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; }
+.folder-create-form { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, .7fr) auto; }
+.folder-create-form input, .folder-create-form select { margin: 0; }
+.folder-card.subfolder { margin-left: 28px; border-left: 3px solid var(--accent-soft); }
+.folder-card.selected { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); background: var(--accent-soft); }
+.folder-open { min-width: 0; padding: 5px 0; border: 0; background: transparent; text-align: left; }
+.folder-open strong, .folder-open span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-open span { color: var(--muted); font-size: 12px; }
+.collection-results { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--border); }
+.collection-results .section-heading > span { color: var(--muted); }
+.tag-chip.active { box-shadow: 0 0 0 2px var(--tag-color, var(--accent)); }
 textarea { width: 100%; min-height: 110px; padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--bg); resize: vertical; outline: 0; }
 
 .persistent-player { z-index: 30; background: var(--surface); transition: width var(--panel) var(--ease), height var(--panel) var(--ease), transform var(--panel) var(--ease), border-radius var(--panel), box-shadow var(--panel); }
@@ -495,6 +505,7 @@ textarea { width: 100%; min-height: 110px; padding: 12px; border: 1px solid var(
   .notes-inline { grid-template-columns: auto 1fr; }
   .notes-inline textarea { grid-column: 1 / -1; }
   .smart-builder, .compare-picker { grid-template-columns: 1fr; }
+  .folder-create-form { grid-template-columns: 1fr; }
   .compare-workspace, .analytics-grid { grid-template-columns: 1fr; }
   .channel-hero { grid-template-columns: 90px minmax(0,1fr); }
   .channel-hero > img, .channel-hero > span { width: 90px; height: 90px; }
