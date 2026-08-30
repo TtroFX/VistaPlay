@@ -65,7 +65,7 @@ export interface AutoAddRule {
 }
 export interface Recommendation { video: VideoRef; reason: string; priority: number; source: 'local' | 'chatgpt' }
 export interface SearchFilters { type: 'video' | 'channel' | 'playlist'; publishedAfter?: string; duration: 'any' | 'short' | 'medium' | 'long'; live: 'any' | 'live' | 'upcoming'; excludeChannels: string[]; excludeKeywords: string[]; shorts: 'include' | 'exclude' | 'only'; whitelistOnly: boolean }
-export interface SearchResult { type: 'video' | 'channel' | 'playlist'; id: string; title: string; description?: string; thumbnail?: string; channelTitle?: string; video?: VideoRef }
+export interface SearchResult { type: 'video' | 'channel' | 'playlist'; id: string; title: string; description?: string; thumbnail?: string; channelId?: string; channelTitle?: string; video?: VideoRef }
 export interface ThemeSettings { mode: ThemeMode; surface: SurfaceTone; accent: string }
 export interface LayoutSettings { sidebarMode: 'expanded' | 'compact' | 'hidden'; sidebarOrder: string[]; sidebarHidden: string[]; cardSize: 'compact' | 'comfortable' | 'large'; rightPaneWidth: number; defaultWatchTab: string; focusMode: boolean; cinemaMode: boolean }
 export interface PlaybackSettings { globalRate: number; speedPresets: number[]; seekSeconds: 5 | 10 | 15 | 30; boostMode: 'next' | 'maximum'; continuousPlay: boolean }

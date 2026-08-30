@@ -142,7 +142,7 @@ export async function searchRemote(query: string, filters: SearchFilters, pageTo
   if (filters.publishedAfter) params.publishedAfter = new Date(filters.publishedAfter).toISOString()
   if (filters.live !== 'any') params.eventType = filters.live
   if (filters.type === 'video' && filters.duration !== 'any') params.videoDuration = filters.duration
-  const search = await apiFetch<{ items?: Array<{ id: { videoId?: string; channelId?: string; playlistId?: string }; snippet?: { title?: string; description?: string; channelTitle?: string; thumbnails?: { medium?: { url: string } } } }>; nextPageToken?: string }>('search', params, signal)
+  const search = await apiFetch<{ items?: Array<{ id: { videoId?: string; channelId?: string; playlistId?: string }; snippet?: { title?: string; description?: string; channelId?: string; channelTitle?: string; thumbnails?: { medium?: { url: string } } } }>; nextPageToken?: string }>('search', params, signal)
   const ids = (search.items ?? []).map((item) => item.id.videoId).filter(Boolean) as string[]
   const verified = filters.type === 'video' ? await verifyVideoIds(ids, signal) : { valid: [], invalid: [] }
   const excludedChannels = new Set(filters.excludeChannels.map((value) => value.toLowerCase()))
@@ -162,6 +162,7 @@ export async function searchRemote(query: string, filters: SearchFilters, pageTo
         title: item.snippet?.title ?? (filters.type === 'channel' ? 'Channel' : 'Playlist'),
         description: item.snippet?.description,
         thumbnail: item.snippet?.thumbnails?.medium?.url,
+        channelId: filters.type === 'channel' ? item.id.channelId : item.snippet?.channelId,
         channelTitle: item.snippet?.channelTitle
       })).filter((item) => item.id && !excludedWords.some((word) => `${item.title} ${item.description ?? ''}`.toLowerCase().includes(word)))
   const value = { items, nextPageToken: search.nextPageToken }

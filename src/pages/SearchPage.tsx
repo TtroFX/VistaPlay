@@ -4,27 +4,33 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { EmptyState, LoadingCards } from '../components/EmptyState'
 import { VideoCard } from '../components/VideoCard'
 import type { SearchFilters, SearchResult } from '../domain/types'
+import { filterAndSortSearchResults, type SearchSort } from '../lib/searchRules'
 import { CapabilityError, parseYouTubeInput, searchRemote } from '../lib/youtube'
-import { applyVisibilityRules } from '../lib/videoRules'
 import { useApp } from '../store/AppStore'
 
 const defaults: SearchFilters = { type: 'video', duration: 'any', live: 'any', excludeChannels: [], excludeKeywords: [], shorts: 'include', whitelistOnly: false }
 const RESTORE_KEY = 'vistaplay-search-state'
+type RestoredSearch = { query: string; filters: SearchFilters; results: SearchResult[]; next?: string; sort?: SearchSort; scroll: number }
 
 export default function SearchPage() {
   const app = useApp()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const restored = useRef<null | { query: string; filters: SearchFilters; results: SearchResult[]; next?: string; scroll: number }>(null)
+  const restored = useRef<RestoredSearch | null>(null)
   if (!restored.current) { try { restored.current = JSON.parse(sessionStorage.getItem(RESTORE_KEY) ?? 'null') } catch { restored.current = null } }
-  const [query, setQuery] = useState(params.get('q') ?? restored.current?.query ?? '')
-  const [filters, setFilters] = useState<SearchFilters>(restored.current?.filters ?? defaults)
-  const [results, setResults] = useState<SearchResult[]>(restored.current?.results ?? [])
-  const [next, setNext] = useState<string | undefined>(restored.current?.next)
+  const requestedQuery = params.get('q')
+  const canRestore = !requestedQuery || requestedQuery === restored.current?.query
+  const [query, setQuery] = useState(requestedQuery ?? restored.current?.query ?? '')
+  const [filters, setFilters] = useState<SearchFilters>(canRestore ? restored.current?.filters ?? defaults : defaults)
+  const [results, setResults] = useState<SearchResult[]>(canRestore ? restored.current?.results ?? [] : [])
+  const [next, setNext] = useState<string | undefined>(canRestore ? restored.current?.next : undefined)
+  const [sort, setSort] = useState<SearchSort>(canRestore ? restored.current?.sort ?? 'relevance' : 'relevance')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  useEffect(() => { window.scrollTo(0, restored.current?.scroll ?? 0); return () => sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ query, filters, results, next, scroll: window.scrollY })) }, [])
+  const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: 0 })
+  latest.current = { query, filters, results, next, sort, scroll: window.scrollY }
+  useEffect(() => { window.scrollTo(0, canRestore ? restored.current?.scroll ?? 0 : 0); return () => sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: window.scrollY })) }, [])
   useEffect(() => { if (params.get('q') && !results.length) void runSearch(false) }, [])
 
   async function runSearch(append: boolean, event?: FormEvent) {
@@ -33,12 +39,17 @@ export default function SearchPage() {
     if (parsed) { navigate(parsed.type === 'video' ? `/watch?v=${parsed.id}` : parsed.type === 'channel' ? `/channel/${parsed.id}` : `/playlist/${parsed.id}`); return }
     setLoading(true); setError(''); setParams({ q: query.trim() })
     try {
-      const response = await searchRemote(query.trim(), filters, append ? next : undefined)
-      const visible = response.items.filter((item) => item.video ? applyVisibilityRules([item.video], app.state.settings).length > 0 : !app.state.settings.blacklist.channels.includes(item.id) && (!app.state.settings.whitelistOnly || app.state.settings.whitelistChannels.includes(item.id)))
-      setResults((items) => append ? [...items, ...visible] : visible)
+      const effectiveFilters = app.feature('advancedSearch') ? { ...filters } : { ...defaults, type: filters.type }
+      if (!app.feature('shorts')) effectiveFilters.shorts = 'exclude'
+      if (!app.feature('live')) effectiveFilters.live = 'any'
+      const response = await searchRemote(query.trim(), effectiveFilters, append ? next : undefined)
+      const combined = append ? [...results, ...response.items] : response.items
+      const visible = filterAndSortSearchResults(combined, app.state.settings, { shorts: app.feature('shorts'), live: app.feature('live'), whitelistOnly: effectiveFilters.whitelistOnly, sort })
+      const deduped = [...new Map(visible.map((item) => [`${item.type}:${item.id}`, item])).values()]
+      setResults(deduped)
       setNext(response.nextPageToken)
       app.addSearchHistory(query.trim())
-      app.upsertVideos(visible.map((item) => item.video).filter(Boolean) as any)
+      app.upsertVideos(deduped.map((item) => item.video).filter(Boolean) as NonNullable<SearchResult['video']>[])
     } catch (reason) { setError(reason instanceof CapabilityError ? reason.message : reason instanceof Error ? reason.message : '検索に失敗しました') }
     finally { setLoading(false) }
   }
@@ -55,6 +66,7 @@ export default function SearchPage() {
       <div className="filter-bar">
         {(['video', 'channel', 'playlist'] as const).map((type) => <button type="button" className={`filter-chip ${filters.type === type ? 'active' : ''}`} onClick={() => setFilters({ ...filters, type })} key={type}>{type === 'video' ? <Play /> : type === 'channel' ? <UserRound /> : <ListPlus />}{type}</button>)}
         {app.feature('advancedSearch') && <button type="button" className={`filter-chip ${showFilters ? 'active' : ''}`} onClick={() => setShowFilters((value) => !value)}><SlidersHorizontal />詳細Filter</button>}
+        {filters.type === 'video' && <label className="inline-select">並び順<select value={sort} onChange={(event) => setSort(event.target.value as SearchSort)}><option value="relevance">関連度</option><option value="newest">新しい順</option><option value="views">再生数順</option></select></label>}
       </div>
       {showFilters && app.feature('advancedSearch') && <div className="advanced-filters">
         <label>公開日<input type="date" value={filters.publishedAfter ?? ''} onChange={(e) => setFilters({ ...filters, publishedAfter: e.target.value || undefined })} /></label>
@@ -63,8 +75,10 @@ export default function SearchPage() {
         {app.feature('shorts') && <label>Shorts<select value={filters.shorts} onChange={(e) => setFilters({ ...filters, shorts: e.target.value as SearchFilters['shorts'] })}><option value="include">含む</option><option value="exclude">除外</option><option value="only">Shortsのみ</option></select></label>}
         <label>除外Keyword<input value={filters.excludeKeywords.join(', ')} onChange={(e) => setFilters({ ...filters, excludeKeywords: e.target.value.split(',').map((v) => v.trim()).filter(Boolean) })} placeholder="comma区切り" /></label>
         <label>除外Channel ID<input value={filters.excludeChannels.join(', ')} onChange={(e) => setFilters({ ...filters, excludeChannels: e.target.value.split(',').map((v) => v.trim()).filter(Boolean) })} /></label>
+        <label className="check-label"><input type="checkbox" checked={filters.whitelistOnly} onChange={(e) => setFilters({ ...filters, whitelistOnly: e.target.checked })} />Whitelist-only</label>
       </div>}
     </form>
+    {!results.length && app.state.searchHistory.length > 0 && <div className="filter-bar search-history"><span>最近の検索</span>{app.state.searchHistory.slice(0, 8).map((item) => <button className="filter-chip" key={item} onClick={() => setQuery(item)}><Search />{item}</button>)}<button className="text-button" onClick={() => app.replaceState({ ...app.state, searchHistory: [], revision: app.state.revision + 1, updatedAt: new Date().toISOString() })}>履歴を消去</button></div>}
     {error && <div className="capability-notice"><Filter /><div><strong>検索Capabilityを利用できません</strong><p>{error}</p><span>URL / 11文字Video IDからの直接再生とlocal Library検索は利用できます。</span></div></div>}
     {loading && !results.length ? <LoadingCards /> : results.length ? <>
       <div className={filters.type === 'video' ? 'video-grid' : 'entity-list'}>{results.map((result) => result.video ? <VideoCard video={result.video} key={result.id} /> : <button className="entity-result" key={result.id} onClick={() => openResult(result)}>{result.thumbnail ? <img src={result.thumbnail} alt="" /> : <span className="entity-placeholder"><UserRound /></span>}<span><strong>{result.title}</strong><small>{result.description}</small></span></button>)}</div>
