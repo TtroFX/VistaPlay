@@ -1,6 +1,7 @@
 import { Archive, Bot, Captions, ChevronDown, ChevronRight, Clock3, FileText, GitCompareArrows, Heart, Inbox, ListVideo, MessageCircle, NotebookPen, Plus, SkipForward, Sparkles, Tags, UserRound } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { NoteEditor } from '../components/NoteEditor'
 import { fetchComments, extractChapters, extractTimestamps, verifyVideoIds, type YouTubeCommentsResponse } from '../lib/youtube'
 import { fetchSponsorSegments, type SponsorSegment } from '../lib/sponsorBlock'
 import { formatDuration } from '../lib/time'
@@ -116,7 +117,7 @@ export default function WatchPage() {
         {tab === 'comments' && <div className="comments-panel"><div className="comment-toolbar"><input value={commentKeyword} onChange={(e) => setCommentKeyword(e.target.value)} placeholder="Keyword" aria-label="Comment keyword" /><input value={commentUsername} onChange={(e) => setCommentUsername(e.target.value)} placeholder="Username" aria-label="Comment username" /><select value={commentOrder} onChange={(e) => setCommentOrder(e.target.value as 'relevance' | 'time')}><option value="relevance">Relevance</option><option value="time">Newest</option></select><label className="check-label compact-check"><input type="checkbox" checked={commentHasTimestamp} onChange={(e) => setCommentHasTimestamp(e.target.checked)} />Timestampあり</label><label className="check-label compact-check"><input type="checkbox" checked={commentHasReplies} onChange={(e) => setCommentHasReplies(e.target.checked)} />Replyあり</label></div>{commentError && <p className="error-copy">{commentError}</p>}{commentLoading && !comments.length && <p className="pane-empty">Commentを読み込み中…</p>}{!commentLoading && !filteredComments.length && <p className="pane-empty">取得済みCommentに一致する結果はありません。</p>}{filteredComments.map((comment) => <CommentItem comment={comment} duration={shown.durationSeconds} key={comment.id} />)}{commentNext && comments.length < 200 && <button className="load-comments" disabled={commentLoading} onClick={() => void loadMoreComments()}>{commentLoading ? '読み込み中…' : 'さらに20件取得'}</button>}</div>}
       </div></aside>}
     </div>
-    {!focusMode && <section className="notes-inline"><NotebookPen /><div><strong>Note</strong><span>Plain text / 最大20,000文字 / focusを外すと保存</span></div><textarea maxLength={20000} defaultValue={app.state.notes.find((note) => note.videoId === videoId)?.text ?? ''} onBlur={(e) => app.saveNote(videoId, e.target.value)} /></section>}
+    {!focusMode && <section className="notes-inline"><NotebookPen /><div><strong>Note</strong><span>Plain text / 最大20,000文字 / 入力停止後に自動保存</span></div><NoteEditor key={videoId} videoId={videoId} initialValue={app.state.notes.find((note) => note.videoId === videoId)?.text ?? ''} onSave={app.saveNote} /></section>}
   </div>
 }
 
