@@ -1,5 +1,5 @@
 import { Archive, Bot, Captions, ChevronDown, ChevronRight, Clock3, FileText, GitCompareArrows, Heart, Inbox, ListVideo, MessageCircle, NotebookPen, Plus, SkipForward, Sparkles, Tags, UserRound } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { fetchComments, extractChapters, extractTimestamps, verifyVideoIds, type YouTubeCommentsResponse } from '../lib/youtube'
 import { fetchSponsorSegments, type SponsorSegment } from '../lib/sponsorBlock'
@@ -22,12 +22,14 @@ export default function WatchPage() {
   const app = useApp(); const navigate = useNavigate(); const [params] = useSearchParams(); const videoId = params.get('v')
   const [tab, setTab] = useState<WatchTab>(app.state.settings.layout.defaultWatchTab as WatchTab)
   const [comments, setComments] = useState<CommentView[]>([]); const [commentNext, setCommentNext] = useState<string>(); const [commentLoading, setCommentLoading] = useState(false); const [commentError, setCommentError] = useState(''); const [commentKeyword, setCommentKeyword] = useState(''); const [commentUsername, setCommentUsername] = useState(''); const [commentHasTimestamp, setCommentHasTimestamp] = useState(false); const [commentHasReplies, setCommentHasReplies] = useState(false); const [commentOrder, setCommentOrder] = useState<'relevance' | 'time'>('relevance')
+  const commentRequest = useRef<AbortController | undefined>(undefined); const commentGeneration = useRef(0)
   const [sponsors, setSponsors] = useState<SponsorSegment[]>([]); const [descriptionOpen, setDescriptionOpen] = useState(false)
   const dismissDescription = useTemporaryHistory(descriptionOpen, () => setDescriptionOpen(false), 'watch-description')
   const video = videoId ? app.state.videos[videoId] ?? (app.currentVideo?.videoId === videoId ? app.currentVideo : undefined) : undefined
   const chapters = useMemo(() => extractChapters(video?.description ?? '', video?.durationSeconds), [video?.description, video?.durationSeconds])
   const focusMode = app.state.settings.layout.focusMode
   const cinemaMode = app.state.settings.layout.cinemaMode
+  const commentsEnabled = app.feature('comments')
   const allTabs = ([['queue', 'Queue', ListVideo], ...(app.feature('chapters') ? [['chapters', 'Chapters', FileText]] : []), ...(app.feature('comments') ? [['comments', 'Comments', MessageCircle]] : []), ...(app.feature('captions') ? [['captions', 'Captions', Captions]] : []), ...(app.feature('liveChat') && video?.liveStatus === 'live' ? [['livechat', 'Live Chat', MessageCircle]] : []), ['overview', 'Overview', Sparkles]] as Array<[WatchTab, string, typeof ListVideo]>)
   const tabs = focusMode ? allTabs.filter(([key]) => key === 'chapters' || key === 'captions') : allTabs
   const paneVisible = !cinemaMode && tabs.length > 0
@@ -50,15 +52,38 @@ export default function WatchPage() {
     const controller = new AbortController(); fetchSponsorSegments(videoId, controller.signal).then(setSponsors).catch(() => setSponsors([])); return () => controller.abort()
   }, [app.feature, focusMode, videoId])
 
-  useEffect(() => { if (!focusMode && !cinemaMode && app.feature('comments') && tab === 'comments' && !comments.length) void loadComments(false) }, [tab, commentOrder, app.feature, focusMode, cinemaMode])
+  useEffect(() => {
+    commentRequest.current?.abort()
+    const generation = ++commentGeneration.current
+    setComments([]); setCommentNext(undefined); setCommentError(''); setCommentLoading(false)
+    if (!videoId || !commentsEnabled || focusMode || cinemaMode || tab !== 'comments') return
+    const controller = new AbortController(); commentRequest.current = controller; setCommentLoading(true)
+    void fetchComments(videoId, undefined, commentOrder, controller.signal).then((data) => {
+      if (commentGeneration.current !== generation) return
+      setComments(mapComments(data)); setCommentNext(data.nextPageToken)
+    }).catch((error) => {
+      if (!controller.signal.aborted && commentGeneration.current === generation) setCommentError(error instanceof Error ? error.message : 'Comments unavailable')
+    }).finally(() => {
+      if (commentGeneration.current === generation) setCommentLoading(false)
+    })
+    return () => controller.abort()
+  }, [videoId, tab, commentOrder, commentsEnabled, focusMode, cinemaMode])
   useEffect(() => { if (tabs.length && !tabs.some(([key]) => key === tab)) setTab(tabs[0][0]) }, [availableTabKeys, tab])
 
-  async function loadComments(append: boolean) {
-    if (!app.feature('comments') || !videoId || commentLoading || comments.length >= 200) return
+  async function loadMoreComments() {
+    if (!commentsEnabled || !videoId || !commentNext || commentLoading || comments.length >= 200) return
+    const controller = new AbortController(); commentRequest.current = controller
+    const generation = ++commentGeneration.current
     setCommentLoading(true); setCommentError('')
-    try { const data = await fetchComments(videoId, append ? commentNext : undefined, commentOrder); const mapped = mapComments(data); setComments((items) => append ? [...items, ...mapped].slice(0, 200) : mapped); setCommentNext(data.nextPageToken) }
-    catch (error) { setCommentError(error instanceof Error ? error.message : 'Comments unavailable') }
-    finally { setCommentLoading(false) }
+    try {
+      const data = await fetchComments(videoId, commentNext, commentOrder, controller.signal)
+      if (commentGeneration.current !== generation) return
+      setComments((items) => [...items, ...mapComments(data)].slice(0, 200)); setCommentNext(data.nextPageToken)
+    } catch (error) {
+      if (!controller.signal.aborted && commentGeneration.current === generation) setCommentError(error instanceof Error ? error.message : 'Comments unavailable')
+    } finally {
+      if (commentGeneration.current === generation) setCommentLoading(false)
+    }
   }
 
   if (!videoId || videoId.length !== 11) return <div className="page"><div className="capability-notice"><strong>正しいVideo IDが必要です</strong></div></div>
@@ -88,7 +113,7 @@ export default function WatchPage() {
         {tab === 'captions' && <div className="capability-copy"><Captions /><h3>YouTube標準Caption</h3><p>字幕はPlayer内の正式Caption操作から利用できます。iframe字幕のscrapingは行いません。</p></div>}
         {tab === 'livechat' && <iframe className="live-chat-frame" title="YouTube Live Chat" src={`https://www.youtube.com/live_chat?v=${videoId}&embed_domain=${window.location.hostname}`} />}
         {tab === 'overview' && <div className="overview-list"><div><span>Duration</span><strong>{formatDuration(shown.durationSeconds)}</strong></div><div><span>Category</span><strong>{shown.categoryId ?? 'Unavailable'}</strong></div><div><span>Watch state</span><strong>{app.state.history[videoId]?.state ?? 'UNWATCHED'}</strong></div>{shown.tags?.slice(0, 12).map((tag) => <span className="tag-chip" key={tag}>{tag}</span>)}</div>}
-        {tab === 'comments' && <div className="comments-panel"><div className="comment-toolbar"><input value={commentKeyword} onChange={(e) => setCommentKeyword(e.target.value)} placeholder="Keyword" aria-label="Comment keyword" /><input value={commentUsername} onChange={(e) => setCommentUsername(e.target.value)} placeholder="Username" aria-label="Comment username" /><select value={commentOrder} onChange={(e) => { setCommentOrder(e.target.value as 'relevance' | 'time'); setComments([]); setCommentNext(undefined) }}><option value="relevance">Relevance</option><option value="time">Newest</option></select><label className="check-label compact-check"><input type="checkbox" checked={commentHasTimestamp} onChange={(e) => setCommentHasTimestamp(e.target.checked)} />Timestampあり</label><label className="check-label compact-check"><input type="checkbox" checked={commentHasReplies} onChange={(e) => setCommentHasReplies(e.target.checked)} />Replyあり</label></div>{commentError && <p className="error-copy">{commentError}</p>}{!commentLoading && !filteredComments.length && <p className="pane-empty">取得済みCommentに一致する結果はありません。</p>}{filteredComments.map((comment) => <CommentItem comment={comment} duration={shown.durationSeconds} key={comment.id} />)}{commentNext && comments.length < 200 && <button className="load-comments" disabled={commentLoading} onClick={() => void loadComments(true)}>{commentLoading ? '読み込み中…' : 'さらに20件取得'}</button>}</div>}
+        {tab === 'comments' && <div className="comments-panel"><div className="comment-toolbar"><input value={commentKeyword} onChange={(e) => setCommentKeyword(e.target.value)} placeholder="Keyword" aria-label="Comment keyword" /><input value={commentUsername} onChange={(e) => setCommentUsername(e.target.value)} placeholder="Username" aria-label="Comment username" /><select value={commentOrder} onChange={(e) => setCommentOrder(e.target.value as 'relevance' | 'time')}><option value="relevance">Relevance</option><option value="time">Newest</option></select><label className="check-label compact-check"><input type="checkbox" checked={commentHasTimestamp} onChange={(e) => setCommentHasTimestamp(e.target.checked)} />Timestampあり</label><label className="check-label compact-check"><input type="checkbox" checked={commentHasReplies} onChange={(e) => setCommentHasReplies(e.target.checked)} />Replyあり</label></div>{commentError && <p className="error-copy">{commentError}</p>}{commentLoading && !comments.length && <p className="pane-empty">Commentを読み込み中…</p>}{!commentLoading && !filteredComments.length && <p className="pane-empty">取得済みCommentに一致する結果はありません。</p>}{filteredComments.map((comment) => <CommentItem comment={comment} duration={shown.durationSeconds} key={comment.id} />)}{commentNext && comments.length < 200 && <button className="load-comments" disabled={commentLoading} onClick={() => void loadMoreComments()}>{commentLoading ? '読み込み中…' : 'さらに20件取得'}</button>}</div>}
       </div></aside>}
     </div>
     {!focusMode && <section className="notes-inline"><NotebookPen /><div><strong>Note</strong><span>Plain text / 最大20,000文字 / focusを外すと保存</span></div><textarea maxLength={20000} defaultValue={app.state.notes.find((note) => note.videoId === videoId)?.text ?? ''} onBlur={(e) => app.saveNote(videoId, e.target.value)} /></section>}
