@@ -11,7 +11,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      includeAssets: ['icon-192.png', 'icon-512.png', 'maskable-512.png'],
+      includeAssets: ['icon-192.webp', 'icon-512.webp', 'maskable-512.webp'],
       manifest: {
         name: 'VistaPlay',
         short_name: 'VistaPlay',
@@ -23,9 +23,9 @@ export default defineConfig({
         start_url: base,
         scope: base,
         icons: [
-          { src: appPath('icon-192.png'), sizes: '192x192', type: 'image/png' },
-          { src: appPath('icon-512.png'), sizes: '512x512', type: 'image/png' },
-          { src: appPath('maskable-512.png'), sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+          { src: appPath('icon-192.webp'), sizes: '192x192', type: 'image/webp' },
+          { src: appPath('icon-512.webp'), sizes: '512x512', type: 'image/webp' },
+          { src: appPath('maskable-512.webp'), sizes: '512x512', type: 'image/webp', purpose: 'maskable' }
         ],
         shortcuts: [
           { name: 'Search', short_name: 'Search', url: appPath('search') },
@@ -39,7 +39,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: 'index.html',
-        globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,png,webp,svg,woff2}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/i\.ytimg\.com\//,
