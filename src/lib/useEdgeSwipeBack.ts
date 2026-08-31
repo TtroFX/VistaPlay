@@ -26,7 +26,8 @@ export function useEdgeSwipeBack(onBack: () => void): RefObject<HTMLElement | nu
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Element | null
-      if (event.pointerType !== 'touch' || event.clientX > 42 || target?.closest(INTERACTIVE)) return
+      const contentLeft = element.getBoundingClientRect().left
+      if (event.pointerType !== 'touch' || event.clientX - contentLeft > 42 || target?.closest(INTERACTIVE)) return
       startX = event.clientX
       startY = event.clientY
       startedAt = performance.now()
