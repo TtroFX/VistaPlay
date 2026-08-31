@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { LoadingCards } from './components/EmptyState'
+import { NativeControlLayer } from './components/NativeControlLayer'
 import { Sidebar } from './components/Sidebar'
 import { ToastViewport } from './components/ToastViewport'
 import { TopBar } from './components/TopBar'
@@ -98,6 +99,7 @@ export function AppShell() {
         <Suspense fallback={<LoadingCards />}><Outlet /></Suspense>
       </main>
     </div>
+    <NativeControlLayer />
     <ToastViewport />
   </div>
 }
