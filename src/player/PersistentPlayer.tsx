@@ -127,7 +127,11 @@ export function PersistentPlayer() {
     const channelAutoplay = app.state.channelPreferences.find((item) => item.channelId === current.channelId)?.queueAutoplay
     const action = resolvePlaybackEndAction(repeat, app.state.queue.length, channelAutoplay ?? app.state.settings.playback.continuousPlay)
     if (action === 'repeat') { performSeek(0, false); playerEngine.play() }
-    else if (action === 'next') app.playNext()
+    else if (action === 'next') {
+      const nextVideoId = app.state.queue[0]?.video.videoId
+      app.playNext()
+      if (full && nextVideoId) navigate(`/watch?v=${nextVideoId}`, { replace: true })
+    }
   }, [app.player.state, current?.videoId])
 
   useEffect(() => {
