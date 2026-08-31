@@ -8,6 +8,7 @@ import type { FeatureKey } from './domain/types'
 import { installRuntimeDiagnostics } from './lib/diagnostics'
 import { AppProvider, useApp } from './store/AppStore'
 import './styles.css'
+import './upgrades.css'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 const SearchPage = lazy(() => import('./pages/SearchPage'))

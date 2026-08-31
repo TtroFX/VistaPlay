@@ -1,5 +1,5 @@
-import { Suspense, useCallback, useEffect } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { LoadingCards } from './components/EmptyState'
 import { Sidebar } from './components/Sidebar'
 import { ToastViewport } from './components/ToastViewport'
@@ -14,9 +14,28 @@ import { useApp } from './store/AppStore'
 export function AppShell() {
   const app = useApp()
   const location = useLocation()
+  const navigationType = useNavigationType()
   const navigate = useNavigate()
   const swipeBack = useCallback(() => navigate(-1), [navigate])
   const swipeRef = useEdgeSwipeBack(swipeBack)
+  const previousPathname = useRef(location.pathname)
+
+  useEffect(() => {
+    const previous = window.history.scrollRestoration
+    window.history.scrollRestoration = 'manual'
+    return () => { window.history.scrollRestoration = previous }
+  }, [])
+
+  useLayoutEffect(() => {
+    const previous = previousPathname.current
+    previousPathname.current = location.pathname
+    if (previous === location.pathname || navigationType === 'POP') return
+    const root = document.documentElement
+    const priorBehavior = root.style.scrollBehavior
+    root.style.scrollBehavior = 'auto'
+    window.scrollTo(0, 0)
+    root.style.scrollBehavior = priorBehavior
+  }, [location.pathname, navigationType])
 
   useEffect(() => {
     const mode = app.state.settings.theme.mode

@@ -1,6 +1,6 @@
 import { Bot, Filter, ListPlus, Play, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
-import { FormEvent, useEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
 import { EmptyState, LoadingCards } from '../components/EmptyState'
 import { VideoCard } from '../components/VideoCard'
 import type { SearchFilters, SearchResult } from '../domain/types'
@@ -16,6 +16,8 @@ type RestoredSearch = { query: string; filters: SearchFilters; results: SearchRe
 
 export default function SearchPage() {
   const app = useApp()
+  const location = useLocation()
+  const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [smartSearch] = useState<SmartSearchImport | null>(() => {
@@ -28,8 +30,9 @@ export default function SearchPage() {
   const restored = useRef<RestoredSearch | null>(null)
   if (!restored.current) { try { restored.current = JSON.parse(sessionStorage.getItem(RESTORE_KEY) ?? 'null') } catch { restored.current = null } }
   const requestedQuery = params.get('q')
-  const canRestore = !smartSearch && (!requestedQuery || requestedQuery === restored.current?.query)
-  const [query, setQuery] = useState(smartSearch?.searches[0].query ?? requestedQuery ?? restored.current?.query ?? '')
+  const isHistoryReturn = navigationType === 'POP' && location.key !== 'default'
+  const canRestore = isHistoryReturn && !smartSearch && Boolean(restored.current) && (!requestedQuery || requestedQuery === restored.current?.query)
+  const [query, setQuery] = useState(smartSearch?.searches[0].query ?? requestedQuery ?? (canRestore ? restored.current?.query : '') ?? '')
   const [filters, setFilters] = useState<SearchFilters>(canRestore ? restored.current?.filters ?? defaults : defaults)
   const [results, setResults] = useState<SearchResult[]>(canRestore ? restored.current?.results ?? [] : [])
   const [next, setNext] = useState<string | undefined>(canRestore ? restored.current?.next : undefined)
@@ -41,23 +44,26 @@ export default function SearchPage() {
   const searchRequest = useRef<AbortController | undefined>(undefined)
   const searchGeneration = useRef(0)
   const dismissFilters = useTemporaryHistory(showFilters, () => setShowFilters(false), 'search-filters')
-  const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: 0 })
+  const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: canRestore ? restored.current?.scroll ?? 0 : 0 })
   latest.current = { query, filters, results, next, sort, scroll: latest.current.scroll }
+
+  useLayoutEffect(() => {
+    if (!canRestore) return
+    const top = restored.current?.scroll ?? 0
+    const root = document.documentElement
+    const priorBehavior = root.style.scrollBehavior
+    root.style.scrollBehavior = 'auto'
+    window.scrollTo(0, top)
+    root.scrollTop = top
+    document.body.scrollTop = top
+    root.style.scrollBehavior = priorBehavior
+  }, [])
+
   useEffect(() => {
     const trackScroll = () => { latest.current.scroll = window.scrollY }
     window.addEventListener('scroll', trackScroll, { passive: true })
-    const restoredScroll = canRestore ? restored.current?.scroll ?? 0 : 0
-    let outerFrame = 0
-    let innerFrame = 0
-    if (restoredScroll > 0) {
-      outerFrame = window.requestAnimationFrame(() => {
-        innerFrame = window.requestAnimationFrame(() => window.scrollTo(0, restoredScroll))
-      })
-    }
     return () => {
       window.removeEventListener('scroll', trackScroll)
-      if (outerFrame) window.cancelAnimationFrame(outerFrame)
-      if (innerFrame) window.cancelAnimationFrame(innerFrame)
       sessionStorage.setItem(RESTORE_KEY, JSON.stringify(latest.current))
     }
   }, [])
@@ -165,7 +171,7 @@ export default function SearchPage() {
   return <div className="page search-page">
     <div className="page-heading"><div><span className="eyebrow">DISCOVER</span><h1>Search</h1><p>入力後に明示的に検索します。結果は25件ずつ、6時間cacheされます。</p></div>{app.feature('chatgpt') && <button className="ai-button" onClick={() => navigate('/ai')}><Bot />AIに探してもらう</button>}</div>
     <form className="search-workbench" onSubmit={(event) => void runSearch(false, event)}>
-      <div className="large-search"><Search /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="検索語、YouTube URL、Video ID" /><button type="button" className="icon-button" onClick={() => setQuery('')} aria-label="入力を消去"><X /></button><button className="primary-button">検索</button></div>
+      <div className="large-search"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="検索語、YouTube URL、Video ID" /><button type="button" className="icon-button" onClick={() => setQuery('')} aria-label="入力を消去"><X /></button><button className="primary-button">検索</button></div>
       <div className="filter-bar">
         {(['video', 'channel', 'playlist'] as const).map((type) => <button type="button" className={`filter-chip ${filters.type === type ? 'active' : ''}`} onClick={() => setFilters({ ...filters, type })} key={type}>{type === 'video' ? <Play /> : type === 'channel' ? <UserRound /> : <ListPlus />}{type}</button>)}
         {app.feature('advancedSearch') && <button type="button" className={`filter-chip ${showFilters ? 'active' : ''}`} onClick={() => showFilters ? dismissFilters() : setShowFilters(true)}><SlidersHorizontal />詳細Filter</button>}
