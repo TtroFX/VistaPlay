@@ -47,13 +47,16 @@ export default function SearchPage() {
     const trackScroll = () => { latest.current.scroll = window.scrollY }
     window.addEventListener('scroll', trackScroll, { passive: true })
     const restoredScroll = canRestore ? restored.current?.scroll ?? 0 : 0
+    let outerFrame = 0
     let innerFrame = 0
-    const outerFrame = window.requestAnimationFrame(() => {
-      innerFrame = window.requestAnimationFrame(() => window.scrollTo(0, restoredScroll))
-    })
+    if (restoredScroll > 0) {
+      outerFrame = window.requestAnimationFrame(() => {
+        innerFrame = window.requestAnimationFrame(() => window.scrollTo(0, restoredScroll))
+      })
+    }
     return () => {
       window.removeEventListener('scroll', trackScroll)
-      window.cancelAnimationFrame(outerFrame)
+      if (outerFrame) window.cancelAnimationFrame(outerFrame)
       if (innerFrame) window.cancelAnimationFrame(innerFrame)
       sessionStorage.setItem(RESTORE_KEY, JSON.stringify(latest.current))
     }
