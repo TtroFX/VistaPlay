@@ -27,7 +27,6 @@ GitHub Actions runs the same clean-install gate on `feature/production-v1`, `mai
 
 - `VITE_YOUTUBE_API_KEY`: browser API key restricted to the deployed origins and YouTube Data API v3.
 - `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`: public Supabase project configuration.
-- `VITE_GOOGLE_CLIENT_ID`: reserved for direct Google capability work; current OAuth route uses Supabase Google provider.
 
 Never put server secrets in `VITE_*`. Supabase auth uses `sessionStorage`, not `localStorage`. Apply [the migration](supabase/migrations/202608290001_initial.sql) before cloud sync.
 
