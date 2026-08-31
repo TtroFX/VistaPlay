@@ -29,6 +29,10 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 installRuntimeDiagnostics()
 
+const routerBasename = import.meta.env.BASE_URL === '/'
+  ? undefined
+  : import.meta.env.BASE_URL.replace(/\/$/, '')
+
 function FeatureGuard({ feature, children }: { feature: FeatureKey; children: ReactNode }) {
   const app = useApp()
   return app.feature(feature) ? children : <NotFoundPage />
@@ -36,7 +40,7 @@ function FeatureGuard({ feature, children }: { feature: FeatureKey; children: Re
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
-    <BrowserRouter>
+    <BrowserRouter basename={routerBasename}>
       <AppProvider>
         <Routes>
           <Route element={<AppShell />}>
