@@ -171,6 +171,8 @@ test('feature guard, Search Back state and scroll restoration, reduced motion', 
   await expect(input).toHaveValue('smoke-seed')
   await expect(page.locator('.video-card')).toHaveCount(30)
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500)
+  await page.getByRole('button', { name: 'プレイヤーを閉じる' }).click()
+  await expect(page.locator('.persistent-player')).toHaveCount(0)
 
   await page.goto('/settings/features')
   const watchInboxSwitch = page.getByRole('switch', { name: 'Watch Inbox' })
