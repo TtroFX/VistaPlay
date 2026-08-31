@@ -135,6 +135,8 @@ test('feature guard, Search Back state and scroll restoration, reduced motion', 
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500)
   await page.getByRole('button', { name: '検索', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`/watch\\?v=${VIDEO_A}$`))
+  const storedSearchState = await page.evaluate(() => JSON.parse(sessionStorage.getItem('vistaplay-search-state') ?? 'null'))
+  expect(storedSearchState?.scroll).toBeGreaterThan(500)
   await page.goBack()
   await expect(page).toHaveURL(/\/search$/)
   await expect(input).toHaveValue(VIDEO_A)
