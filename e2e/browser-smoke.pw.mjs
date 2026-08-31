@@ -46,6 +46,26 @@ async function installYouTubeStub(page) {
   })
 }
 
+async function seedSearchResults(page) {
+  await page.addInitScript(() => {
+    if (location.pathname !== '/search' || sessionStorage.getItem('vistaplay-smoke-search-seeded')) return
+    const thumbnail = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="320" height="180"/%3E'
+    const results = Array.from({ length: 30 }, (_, index) => {
+      const id = `SMOKE${String(index).padStart(6, '0')}`
+      const video = { videoId: id, title: `Smoke video ${index}`, channelTitle: 'Smoke Channel', thumbnail, durationSeconds: 600, available: true }
+      return { type: 'video', id, title: video.title, thumbnail, channelTitle: video.channelTitle, video }
+    })
+    sessionStorage.setItem('vistaplay-search-state', JSON.stringify({
+      query: 'smoke-seed',
+      filters: { type: 'video', duration: 'any', live: 'any', excludeChannels: [], excludeKeywords: [], shorts: 'include', whitelistOnly: false },
+      results,
+      sort: 'relevance',
+      scroll: 0,
+    }))
+    sessionStorage.setItem('vistaplay-smoke-search-seeded', '1')
+  })
+}
+
 function watchBlockingErrors(page) {
   const errors = []
   const localOrigin = 'http://127.0.0.1:4173'
@@ -125,21 +145,31 @@ test('tablet shell, direct Watch, persistent mini player, queue and IndexedDB pe
 
 test('feature guard, Search Back state and scroll restoration, reduced motion', async ({ page }) => {
   await installYouTubeStub(page)
+  await seedSearchResults(page)
   const blockingErrors = watchBlockingErrors(page)
 
   await page.goto('/search')
-  await page.evaluate(() => { document.body.style.minHeight = '3200px' })
   const input = page.getByPlaceholder('検索語、YouTube URL、Video ID')
-  await input.fill(VIDEO_A)
+  await expect(input).toHaveValue('smoke-seed')
+  await expect(page.locator('.video-card')).toHaveCount(30)
   await page.evaluate(() => window.scrollTo(0, 700))
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500)
-  await page.getByRole('button', { name: '検索', exact: true }).click()
-  await expect(page).toHaveURL(new RegExp(`/watch\\?v=${VIDEO_A}$`))
+  await page.evaluate(() => {
+    const card = [...document.querySelectorAll('.video-card')].find((element) => {
+      const bounds = element.getBoundingClientRect()
+      return bounds.top >= 80 && bounds.bottom <= window.innerHeight - 20
+    })
+    const button = card?.querySelector('.thumbnail-button')
+    if (!(button instanceof HTMLButtonElement)) throw new Error('No visible Search result card available')
+    button.click()
+  })
+  await expect(page).toHaveURL(/\/watch\?v=/)
   const storedSearchState = await page.evaluate(() => JSON.parse(sessionStorage.getItem('vistaplay-search-state') ?? 'null'))
   expect(storedSearchState?.scroll).toBeGreaterThan(500)
   await page.goBack()
   await expect(page).toHaveURL(/\/search$/)
-  await expect(input).toHaveValue(VIDEO_A)
+  await expect(input).toHaveValue('smoke-seed')
+  await expect(page.locator('.video-card')).toHaveCount(30)
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500)
 
   await page.goto('/settings/features')
@@ -162,11 +192,15 @@ test('feature guard, Search Back state and scroll restoration, reduced motion', 
   expect(blockingErrors, blockingErrors.join('\n')).toEqual([])
 })
 
-test('AI import rejects invalid and oversize payloads in the browser', async ({ page }) => {
+test('AI import rejects invalid, oversize and wrong-version payloads in the browser', async ({ page }) => {
   await installYouTubeStub(page)
   await page.goto('/ai')
   const input = page.locator('.ai-import textarea')
   const validate = page.getByRole('button', { name: /Validate/ })
+
+  await input.fill('{')
+  await validate.click()
+  await expect(page.locator('.import-status.error')).toContainText('拒否:')
 
   await input.fill('{"version":999,"type":"youtube_recommendations","query":"x","items":[]}')
   await validate.click()
