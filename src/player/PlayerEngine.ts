@@ -33,6 +33,9 @@ declare global {
   interface Window { YT?: YouTubeNamespace; onYouTubeIframeAPIReady?: () => void }
 }
 
+const YOUTUBE_API_SRC = 'https://www.youtube.com/iframe_api'
+let youtubeApiPromise: Promise<YouTubeNamespace> | undefined
+
 export interface PlayerSnapshot {
   videoId?: string
   ready: boolean
@@ -48,19 +51,56 @@ export interface PlayerSnapshot {
 
 export function loadYouTubeApi(): Promise<YouTubeNamespace> {
   if (window.YT?.Player) return Promise.resolve(window.YT)
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[src="https://www.youtube.com/iframe_api"]')
+  if (youtubeApiPromise) return youtubeApiPromise
+
+  const pending = new Promise<YouTubeNamespace>((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${YOUTUBE_API_SRC}"]`)
+    const script = existing ?? document.createElement('script')
     const previous = window.onYouTubeIframeAPIReady
-    window.onYouTubeIframeAPIReady = () => { previous?.(); if (window.YT) resolve(window.YT) }
+    let settled = false
+
+    const cleanup = () => {
+      window.clearTimeout(timeout)
+      script.removeEventListener('error', onError)
+      if (window.onYouTubeIframeAPIReady === onReady) window.onYouTubeIframeAPIReady = previous
+    }
+    const succeed = (namespace: YouTubeNamespace) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(namespace)
+    }
+    const fail = (message: string) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      script.remove()
+      reject(new Error(message))
+    }
+    function onError() { fail('YouTube Player API failed to load') }
+    function onReady() {
+      try { previous?.() }
+      finally {
+        if (window.YT?.Player) succeed(window.YT)
+        else fail('YouTube Player API initialized without Player support')
+      }
+    }
+
+    window.onYouTubeIframeAPIReady = onReady
+    script.addEventListener('error', onError, { once: true })
+    const timeout = window.setTimeout(() => fail('YouTube Player API timed out'), 15000)
     if (!existing) {
-      const script = document.createElement('script')
-      script.src = 'https://www.youtube.com/iframe_api'
+      script.src = YOUTUBE_API_SRC
       script.async = true
-      script.onerror = () => reject(new Error('YouTube Player API failed to load'))
       document.head.append(script)
     }
-    window.setTimeout(() => { if (!window.YT?.Player) reject(new Error('YouTube Player API timed out')) }, 15000)
   })
+
+  youtubeApiPromise = pending.catch((error: unknown) => {
+    youtubeApiPromise = undefined
+    throw error
+  })
+  return youtubeApiPromise
 }
 
 class PlayerEngine extends EventTarget {
