@@ -1,7 +1,9 @@
-import { ChevronUp, Gauge, Maximize2, Pause, Play, Repeat, RotateCcw, RotateCw, Volume2, VolumeX, X } from 'lucide-react'
+import { ChevronUp, Gauge, Maximize2, Minimize2, Pause, Play, Repeat, RotateCcw, RotateCw, Volume2, VolumeX, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { WatchSession } from '../domain/types'
+import { recordDiagnostic } from '../lib/diagnostics'
+import { toggleFullscreen } from '../lib/fullscreen'
 import { nextPlaybackRate, resolvePlaybackEndAction, resolvePlaybackRate } from '../lib/playerMath'
 import { formatDuration } from '../lib/time'
 import { useApp } from '../store/AppStore'
@@ -33,6 +35,7 @@ export function PersistentPlayer() {
   const [a, setA] = useState<number>()
   const [b, setB] = useState<number>()
   const [boosting, setBoosting] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
   const boostRate = useRef<number | undefined>(undefined)
   const lastProgress = useRef(performance.now())
   const session = useRef<ActiveSession | undefined>(undefined)
@@ -55,6 +58,12 @@ export function PersistentPlayer() {
     void playerEngine.mount(hostRef.current, current.videoId, position, preferredRate)
     boostRate.current = undefined; setBoosting(false); setA(undefined); setB(undefined); setRepeat(false)
   }, [current?.videoId])
+
+  useEffect(() => {
+    const update = () => setFullscreen(document.fullscreenElement === frameRef.current)
+    document.addEventListener('fullscreenchange', update)
+    return () => document.removeEventListener('fullscreenchange', update)
+  }, [])
 
   useEffect(() => {
     const releaseBoost = () => endBoost()
@@ -198,6 +207,15 @@ export function PersistentPlayer() {
   }
 
   function seek(delta: number) { performSeek(app.player.position + delta); app.notify(`${delta > 0 ? '+' : ''}${delta}秒`) }
+  async function togglePlayerFullscreen() {
+    try {
+      const result = await toggleFullscreen(frameRef.current)
+      if (result === 'unavailable') app.notify('このブラウザではFullscreenを利用できません', 'error')
+    } catch {
+      recordDiagnostic('player', 'Fullscreen request failed')
+      app.notify('Fullscreenへ切り替えられませんでした', 'error')
+    }
+  }
   function setPointB() { if (a === undefined || app.player.position <= a || app.player.position - a < 2) { app.notify('BはAより2秒以上後に設定してください', 'error'); return } setB(app.player.position) }
   function beginBoost() {
     if (boostRate.current !== undefined) return
@@ -252,7 +270,7 @@ export function PersistentPlayer() {
         <span className="control-spacer" />
         <button className="icon-button" onClick={() => playerEngine.toggleMute()} aria-label="ミュート切替">{app.player.muted ? <VolumeX /> : <Volume2 />}</button>
         {full && <label className="volume-control"><span className="sr-only">音量</span><input type="range" min="0" max="100" step="1" value={app.player.volume} onChange={(event) => playerEngine.setVolume(Number(event.target.value))} aria-label="音量" /><span>{Math.round(app.player.volume)}%</span></label>}
-        {full ? <button className="icon-button" onClick={() => void frameRef.current?.requestFullscreen()} aria-label="全画面"><Maximize2 /></button> : <button className="icon-button" onClick={() => navigate(`/watch?v=${current.videoId}`)} aria-label="展開"><ChevronUp /></button>}
+        {full ? <button className={`icon-button ${fullscreen ? 'active' : ''}`} onClick={() => void togglePlayerFullscreen()} aria-label={fullscreen ? '全画面を終了' : '全画面'}>{fullscreen ? <Minimize2 /> : <Maximize2 />}</button> : <button className="icon-button" onClick={() => navigate(`/watch?v=${current.videoId}`)} aria-label="展開"><ChevronUp /></button>}
         <button className="icon-button danger-hover" onClick={() => { finishSession(); app.closePlayer() }} aria-label="プレイヤーを閉じる"><X /></button>
       </div>
       {full && <div className="speed-preset-strip" role="group" aria-label="再生速度プリセット">{app.state.settings.playback.speedPresets.map((rate) => <button type="button" className={app.player.rate === rate ? 'active' : ''} aria-pressed={app.player.rate === rate} disabled={!app.player.availableRates.includes(rate)} onClick={() => playerEngine.setRate(rate)} key={rate}>{rate}x</button>)}</div>}

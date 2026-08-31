@@ -4,6 +4,8 @@ import { LoadingCards } from './components/EmptyState'
 import { Sidebar } from './components/Sidebar'
 import { ToastViewport } from './components/ToastViewport'
 import { TopBar } from './components/TopBar'
+import { recordDiagnostic } from './lib/diagnostics'
+import { toggleFullscreen } from './lib/fullscreen'
 import { useEdgeSwipeBack } from './lib/useEdgeSwipeBack'
 import { PersistentPlayer } from './player/PersistentPlayer'
 import { playerEngine } from './player/PlayerEngine'
@@ -40,7 +42,12 @@ export function AppShell() {
       else if (event.key === 'ArrowLeft') playerEngine.seekBy(-5)
       else if (event.key === 'ArrowRight') playerEngine.seekBy(5)
       else if (event.key.toLowerCase() === 'm') playerEngine.toggleMute()
-      else if (event.key.toLowerCase() === 'f') { const frame = document.querySelector<HTMLElement>('.player-frame'); if (frame && !document.fullscreenElement) void frame.requestFullscreen() }
+      else if (event.key.toLowerCase() === 'f') {
+        const frame = document.querySelector<HTMLElement>('.player-frame')
+        void toggleFullscreen(frame).then((result) => {
+          if (result === 'unavailable') app.notify('このブラウザではFullscreenを利用できません', 'error')
+        }).catch(() => { recordDiagnostic('player', 'Fullscreen request failed'); app.notify('Fullscreenへ切り替えられませんでした', 'error') })
+      }
       else if (event.shiftKey && event.key === ',') { const rates = app.player.availableRates; const index = rates.indexOf(app.player.rate); playerEngine.setRate(rates[Math.max(0, index - 1)] ?? app.player.rate) }
       else if (event.shiftKey && event.key === '.') { const rates = app.player.availableRates; const index = rates.indexOf(app.player.rate); playerEngine.setRate(rates[Math.min(rates.length - 1, index + 1)] ?? app.player.rate) }
     }
