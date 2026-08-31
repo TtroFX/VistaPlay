@@ -180,7 +180,8 @@ test('feature guard and reduced motion', async ({ page }) => {
 
   await page.goto('/settings/features')
   const watchInboxSwitch = page.getByRole('switch', { name: 'Watch Inbox' })
-  await watchInboxSwitch.uncheck()
+  await watchInboxSwitch.locator('..').click()
+  await expect(watchInboxSwitch).not.toBeChecked()
   await expect(page.getByRole('link', { name: 'Watch Inbox' })).toHaveCount(0)
   await page.waitForTimeout(350)
   await page.goto('/inbox')
