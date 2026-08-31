@@ -117,7 +117,12 @@ export default function SearchPage() {
     const searchQuery = (queryOverride ?? query).trim()
     if (!searchQuery) return
     const parsed = parseYouTubeInput(searchQuery)
-    if (parsed) { searchRequest.current?.abort(); navigate(parsed.type === 'video' ? `/watch?v=${parsed.id}` : parsed.type === 'channel' ? `/channel/${parsed.id}` : `/playlist/${parsed.id}`); return }
+    if (parsed) {
+      searchRequest.current?.abort()
+      sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: window.scrollY }))
+      navigate(parsed.type === 'video' ? `/watch?v=${parsed.id}` : parsed.type === 'channel' ? `/channel/${parsed.id}` : `/playlist/${parsed.id}`)
+      return
+    }
     const { controller, generation } = beginSearchRequest()
     setLoading(true); setError(''); setParams({ q: searchQuery })
     if (!append) { setResults([]); setNext(undefined); setSmartSummary('') }
