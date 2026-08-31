@@ -143,7 +143,7 @@ test('tablet shell, direct Watch, persistent mini player, queue and IndexedDB pe
   expect(blockingErrors, blockingErrors.join('\n')).toEqual([])
 })
 
-test('feature guard, Search Back state and scroll restoration, reduced motion', async ({ page }) => {
+test('Search Back restores query, results and scroll position', async ({ page }) => {
   await installYouTubeStub(page)
   await seedSearchResults(page)
   const blockingErrors = watchBlockingErrors(page)
@@ -171,8 +171,12 @@ test('feature guard, Search Back state and scroll restoration, reduced motion', 
   await expect(input).toHaveValue('smoke-seed')
   await expect(page.locator('.video-card')).toHaveCount(30)
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500)
-  await page.getByRole('button', { name: 'プレイヤーを閉じる' }).click()
-  await expect(page.locator('.persistent-player')).toHaveCount(0)
+
+  expect(blockingErrors, blockingErrors.join('\n')).toEqual([])
+})
+
+test('feature guard and reduced motion', async ({ page }) => {
+  const blockingErrors = watchBlockingErrors(page)
 
   await page.goto('/settings/features')
   const watchInboxSwitch = page.getByRole('switch', { name: 'Watch Inbox' })
