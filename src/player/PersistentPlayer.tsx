@@ -1,5 +1,5 @@
 import { ChevronUp, Gauge, Maximize2, Pause, Play, Repeat, RotateCcw, RotateCw, Volume2, VolumeX, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { WatchSession } from '../domain/types'
 import { nextPlaybackRate, resolvePlaybackEndAction, resolvePlaybackRate } from '../lib/playerMath'
@@ -32,6 +32,7 @@ export function PersistentPlayer() {
   const [repeat, setRepeat] = useState(false)
   const [a, setA] = useState<number>()
   const [b, setB] = useState<number>()
+  const [boosting, setBoosting] = useState(false)
   const boostRate = useRef<number | undefined>(undefined)
   const lastProgress = useRef(performance.now())
   const session = useRef<ActiveSession | undefined>(undefined)
@@ -52,8 +53,21 @@ export function PersistentPlayer() {
     if (!hostRef.current || !current) return
     const position = app.state.lastPlayer?.videoId === current.videoId ? app.state.lastPlayer.position : app.state.history[current.videoId]?.position ?? 0
     void playerEngine.mount(hostRef.current, current.videoId, position, preferredRate)
-    setA(undefined); setB(undefined); setRepeat(false)
+    boostRate.current = undefined; setBoosting(false); setA(undefined); setB(undefined); setRepeat(false)
   }, [current?.videoId])
+
+  useEffect(() => {
+    const releaseBoost = () => endBoost()
+    const releaseHiddenBoost = () => { if (document.visibilityState === 'hidden') endBoost() }
+    window.addEventListener('blur', releaseBoost)
+    document.addEventListener('visibilitychange', releaseHiddenBoost)
+    return () => {
+      window.removeEventListener('blur', releaseBoost)
+      document.removeEventListener('visibilitychange', releaseHiddenBoost)
+      if (boostRate.current !== undefined) playerEngine.setRate(boostRate.current)
+      boostRate.current = undefined
+    }
+  }, [])
 
   useEffect(() => {
     if (!current || !app.player.ready) return
@@ -181,8 +195,32 @@ export function PersistentPlayer() {
 
   function seek(delta: number) { performSeek(app.player.position + delta); app.notify(`${delta > 0 ? '+' : ''}${delta}秒`) }
   function setPointB() { if (a === undefined || app.player.position <= a || app.player.position - a < 2) { app.notify('BはAより2秒以上後に設定してください', 'error'); return } setB(app.player.position) }
-  function boostStart() { boostRate.current = app.player.rate; playerEngine.setRate(nextPlaybackRate(app.player.rate, app.player.availableRates, app.state.settings.playback.boostMode)) }
-  function boostEnd() { if (boostRate.current !== undefined) playerEngine.setRate(boostRate.current); boostRate.current = undefined }
+  function beginBoost() {
+    if (boostRate.current !== undefined) return
+    boostRate.current = latest.current.app.player.rate
+    playerEngine.setRate(nextPlaybackRate(latest.current.app.player.rate, latest.current.app.player.availableRates, latest.current.app.state.settings.playback.boostMode))
+    setBoosting(true)
+  }
+  function endBoost() {
+    if (boostRate.current !== undefined) playerEngine.setRate(boostRate.current)
+    boostRate.current = undefined
+    setBoosting(false)
+  }
+  function boostPointerStart(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!event.isPrimary || event.button !== 0) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    beginBoost()
+  }
+  function boostPointerEnd(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    endBoost()
+  }
+  function boostKeyStart(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) { event.preventDefault(); beginBoost() }
+  }
+  function boostKeyEnd(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); endBoost() }
+  }
 
   if (!current) return null
   return <section className={`persistent-player ${full ? 'player-full' : 'player-mini'}`} aria-label="動画プレイヤー">
@@ -205,7 +243,7 @@ export function PersistentPlayer() {
           <button className={`control-chip ${repeat ? 'active' : ''}`} onClick={() => setRepeat((value) => !value)}><Repeat />Repeat</button>
           {app.feature('abRepeat') && <div className="ab-controls"><button className={a !== undefined ? 'active' : ''} onClick={() => { setA(app.player.position); if (b !== undefined && b <= app.player.position + 2) setB(undefined) }}>A</button><button className={b !== undefined ? 'active' : ''} onClick={setPointB}>B</button>{a !== undefined && <button onClick={() => { setA(undefined); setB(undefined) }}>Clear</button>}</div>}
           <select className="rate-select" value={app.player.rate} onChange={(event) => playerEngine.setRate(Number(event.target.value))} aria-label="再生速度">{app.player.availableRates.map((rate) => <option key={rate} value={rate}>{rate}x</option>)}</select>
-          {app.feature('temporaryBoost') && <button className="boost-button" onPointerDown={boostStart} onPointerUp={boostEnd} onPointerCancel={boostEnd}><Gauge />BOOST</button>}
+          {app.feature('temporaryBoost') && <button className={`boost-button ${boosting ? 'is-boosting' : ''}`} aria-pressed={boosting} onPointerDown={boostPointerStart} onPointerUp={boostPointerEnd} onPointerCancel={boostPointerEnd} onLostPointerCapture={endBoost} onKeyDown={boostKeyStart} onKeyUp={boostKeyEnd} onBlur={endBoost}><Gauge />BOOST</button>}
         </>}
         <span className="control-spacer" />
         <button className="icon-button" onClick={() => playerEngine.toggleMute()} aria-label="ミュート切替">{app.player.muted ? <VolumeX /> : <Volume2 />}</button>

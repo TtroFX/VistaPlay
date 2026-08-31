@@ -33,7 +33,7 @@ export function AppShell() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
-      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+      if (target?.matches('input, textarea, select, button, a, [role="button"], [contenteditable="true"]')) return
       if (event.code === 'Space' || event.key.toLowerCase() === 'k') { event.preventDefault(); playerEngine.toggle() }
       else if (event.key.toLowerCase() === 'j') playerEngine.seekBy(-10)
       else if (event.key.toLowerCase() === 'l') playerEngine.seekBy(10)
