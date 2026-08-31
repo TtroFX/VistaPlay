@@ -12,10 +12,43 @@
 }
 @media (min-width: 720px) and (orientation: landscape) {
   .settings-page .setting-grid,
-  .settings-page .feature-groups {
-    width: 100%;
-  }
+  .settings-page .feature-groups { width: 100%; }
 }
+
+/* Folder hierarchy is explicit without turning the tablet library into a dense desktop tree. */
+.folder-tree { display: grid; gap: 8px; margin-top: 18px; }
+.folder-tree-node { min-width: 0; }
+.folder-tree-node > .folder-card {
+  margin-left: min(calc(var(--folder-depth, 0) * 30px), 120px);
+  position: relative;
+}
+.folder-tree-node > .folder-card.subfolder::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: -12px;
+  bottom: 50%;
+  width: 12px;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-radius: 0 0 0 8px;
+}
+.folder-chevron { flex: 0 0 44px; }
+.folder-chevron:disabled { opacity: .55; }
+.tree-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.folder-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; color: var(--muted); }
+.folder-breadcrumb > span { display: inline-flex; align-items: center; gap: 4px; }
+.folder-breadcrumb button { min-height: 40px; padding: 0 8px; border: 0; border-radius: 9px; background: transparent; color: inherit; }
+.folder-breadcrumb button.current { color: var(--accent); font-weight: 700; background: var(--accent-soft); }
+.hierarchical-choice-list label { padding-left: calc(10px + min(var(--folder-depth, 0), 4) * 22px); }
+
+.natural-smart-builder { align-items: end; }
+.natural-smart-builder > label { display: grid; gap: 6px; color: var(--muted); font-size: 13px; }
+.smart-value-input { display: flex !important; align-items: center; gap: 8px; }
+.smart-value-input input { min-width: 120px; }
+.smart-value-input span { color: var(--muted); }
+.smart-group-list > div { align-items: center; }
+.smart-group-list > div > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 
 /* Fullscreen guidance must not assume one Android gesture/navigation mode. */
 .player-frame:fullscreen::after {
@@ -33,6 +66,11 @@
   text-align: center;
   pointer-events: none;
   opacity: .82;
+}
+
+@media (max-width: 720px) {
+  .folder-tree-node > .folder-card { margin-left: min(calc(var(--folder-depth, 0) * 20px), 60px); }
+  .folder-tree-node > .folder-card.subfolder::before { left: -10px; width: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
