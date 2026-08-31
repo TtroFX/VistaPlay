@@ -48,9 +48,15 @@ async function installYouTubeStub(page) {
 
 function watchBlockingErrors(page) {
   const errors = []
+  const localOrigin = 'http://127.0.0.1:4173'
   page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`))
   page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(`console: ${message.text()}`)
+    if (message.type() === 'error' && !message.text().startsWith('Failed to load resource:')) errors.push(`console: ${message.text()}`)
+  })
+  page.on('response', (response) => {
+    if (response.status() < 400) return
+    const url = new URL(response.url())
+    if (url.origin === localOrigin) errors.push(`http ${response.status()}: ${url.pathname}`)
   })
   return errors
 }

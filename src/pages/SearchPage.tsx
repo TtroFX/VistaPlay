@@ -43,7 +43,18 @@ export default function SearchPage() {
   const dismissFilters = useTemporaryHistory(showFilters, () => setShowFilters(false), 'search-filters')
   const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: 0 })
   latest.current = { query, filters, results, next, sort, scroll: window.scrollY }
-  useEffect(() => { window.scrollTo(0, canRestore ? restored.current?.scroll ?? 0 : 0); return () => sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: window.scrollY })) }, [])
+  useEffect(() => {
+    const restoredScroll = canRestore ? restored.current?.scroll ?? 0 : 0
+    let innerFrame = 0
+    const outerFrame = window.requestAnimationFrame(() => {
+      innerFrame = window.requestAnimationFrame(() => window.scrollTo(0, restoredScroll))
+    })
+    return () => {
+      window.cancelAnimationFrame(outerFrame)
+      if (innerFrame) window.cancelAnimationFrame(innerFrame)
+      sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: window.scrollY }))
+    }
+  }, [])
   useEffect(() => { if (smartSearch) void runSmartSearch(smartSearch); else if (params.get('q') && !results.length) void runSearch(false) }, [])
   useEffect(() => {
     if (!requestedQuery || requestedQuery === query) return
