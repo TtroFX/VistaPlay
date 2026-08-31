@@ -30,7 +30,7 @@ const enabled: Record<FeatureKey, boolean> = Object.fromEntries(
 ) as Record<FeatureKey, boolean>
 
 export const defaultSettings: AppSettings = {
-  theme: { mode: 'system', surface: 'neutral', accent: '#176b5b' },
+  theme: { mode: 'system', surface: 'neutral', accent: '#f5a814' },
   layout: {
     sidebarMode: 'expanded', sidebarOrder: ['home', 'search', 'channels', 'library', 'queue', 'history', 'inbox', 'settings'],
     sidebarHidden: [], cardSize: 'comfortable', rightPaneWidth: 360, defaultWatchTab: 'queue', focusMode: false, cinemaMode: false

@@ -1,15 +1,26 @@
 /* Compatibility and tablet-first refinements layered after the production stylesheet. */
 
+:root {
+  --accent-ink: color-mix(in srgb, var(--accent) 72%, black);
+  --accent-border: color-mix(in srgb, var(--accent) 78%, black);
+  --accent-active: color-mix(in srgb, var(--accent) 15%, var(--surface));
+}
+:root[data-theme='dark'] { --accent-ink: color-mix(in srgb, var(--accent) 82%, white); --accent-border: color-mix(in srgb, var(--accent) 78%, white); }
+@media (prefers-color-scheme: dark) { :root[data-theme='system'] { --accent-ink: color-mix(in srgb, var(--accent) 82%, white); --accent-border: color-mix(in srgb, var(--accent) 78%, white); } }
+
+.nav-item.active, .eyebrow, .text-button, .section-kicker, .first-run-icon, .empty-icon { color: var(--accent-ink); }
+.nav-item.active { background: var(--accent-active); }
+.filter-chip.active, .tabs button.active, .control-chip.active, .speed-preset-strip button.active, .segmented button.active {
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  background: var(--accent-active);
+}
+.primary-button { border-color: var(--accent-border); }
+input[type='range'], input[type='checkbox'], progress { accent-color: var(--accent-ink); }
+
 /* Settings uses the same content width contract as every other page. */
-.settings-page {
-  width: 100%;
-  max-width: 1560px !important;
-  margin-inline: auto !important;
-}
-.settings-page .settings-section {
-  width: 100%;
-  max-width: none !important;
-}
+.settings-page { width: 100%; max-width: 1560px !important; margin-inline: auto !important; }
+.settings-page .settings-section { width: 100%; max-width: none !important; }
 @media (min-width: 720px) and (orientation: landscape) {
   .settings-page .setting-grid,
   .settings-page .feature-groups { width: 100%; }
@@ -18,28 +29,15 @@
 /* Folder hierarchy is explicit without turning the tablet library into a dense desktop tree. */
 .folder-tree { display: grid; gap: 8px; margin-top: 18px; }
 .folder-tree-node { min-width: 0; }
-.folder-tree-node > .folder-card {
-  margin-left: min(calc(var(--folder-depth, 0) * 30px), 120px);
-  position: relative;
-}
-.folder-tree-node > .folder-card.subfolder::before {
-  content: '';
-  position: absolute;
-  left: -16px;
-  top: -12px;
-  bottom: 50%;
-  width: 12px;
-  border-left: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  border-radius: 0 0 0 8px;
-}
+.folder-tree-node > .folder-card { margin-left: min(calc(var(--folder-depth, 0) * 30px), 120px); position: relative; }
+.folder-tree-node > .folder-card.subfolder::before { content: ''; position: absolute; left: -16px; top: -12px; bottom: 50%; width: 12px; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0 0 0 8px; }
 .folder-chevron { flex: 0 0 44px; }
 .folder-chevron:disabled { opacity: .55; }
 .tree-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
 .folder-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; margin-bottom: 16px; color: var(--muted); }
 .folder-breadcrumb > span { display: inline-flex; align-items: center; gap: 4px; }
 .folder-breadcrumb button { min-height: 40px; padding: 0 8px; border: 0; border-radius: 9px; background: transparent; color: inherit; }
-.folder-breadcrumb button.current { color: var(--accent); font-weight: 700; background: var(--accent-soft); }
+.folder-breadcrumb button.current { color: var(--accent-ink); font-weight: 700; background: var(--accent-active); }
 .hierarchical-choice-list label { padding-left: calc(10px + min(var(--folder-depth, 0), 4) * 22px); }
 
 .natural-smart-builder { align-items: end; }
@@ -51,28 +49,11 @@
 .smart-group-list > div > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 
 /* Fullscreen guidance must not assume one Android gesture/navigation mode. */
-.player-frame:fullscreen::after {
-  content: '全画面の終了は、端末またはOSの標準の戻る／全画面終了操作を使用してください';
-  position: absolute;
-  left: 50%;
-  bottom: max(14px, env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  max-width: min(92vw, 680px);
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, .58);
-  color: #fff;
-  font-size: 12px;
-  text-align: center;
-  pointer-events: none;
-  opacity: .82;
-}
+.player-frame:fullscreen::after { content: '全画面の終了は、端末またはOSの標準の戻る／全画面終了操作を使用してください'; position: absolute; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: min(92vw, 680px); padding: 8px 12px; border-radius: 999px; background: rgba(0, 0, 0, .58); color: #fff; font-size: 12px; text-align: center; pointer-events: none; opacity: .82; }
 
 @media (max-width: 720px) {
   .folder-tree-node > .folder-card { margin-left: min(calc(var(--folder-depth, 0) * 20px), 60px); }
   .folder-tree-node > .folder-card.subfolder::before { left: -10px; width: 8px; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .page { animation: none !important; }
-}
+@media (prefers-reduced-motion: reduce) { .page { animation: none !important; } }

@@ -3,19 +3,22 @@ import type { PersistedAppState, SyncMetadata, SyncTombstoneKey, WatchSession } 
 import { dbGet, dbPut, openDatabase } from './db'
 
 const STATE_KEY = 'app-state-v3'
+const LEGACY_DEFAULT_ACCENT = '#176b5b'
 
 function mergeState(raw?: Partial<PersistedAppState>): PersistedAppState {
   const base = createDefaultState()
   if (!raw) return base
   const syncMetadata = raw.syncMetadata ?? base.syncMetadata
   const removed = Object.fromEntries((Object.keys(base.syncMetadata.removed) as SyncTombstoneKey[]).map((field) => [field, { ...base.syncMetadata.removed[field], ...syncMetadata.removed?.[field] }])) as SyncMetadata['removed']
+  const storedAccent = raw.settings?.theme?.accent
+  const accent = !storedAccent || storedAccent.toLowerCase() === LEGACY_DEFAULT_ACCENT ? defaultSettings.theme.accent : storedAccent
   return {
     ...base,
     ...raw,
     settings: {
       ...defaultSettings,
       ...raw.settings,
-      theme: { ...defaultSettings.theme, ...raw.settings?.theme },
+      theme: { ...defaultSettings.theme, ...raw.settings?.theme, accent },
       layout: { ...defaultSettings.layout, ...raw.settings?.layout },
       playback: { ...defaultSettings.playback, ...raw.settings?.playback },
       features: { ...defaultSettings.features, ...raw.settings?.features }
