@@ -2,7 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const base = process.env.GITHUB_PAGES === 'true' ? '/VistaPlay/' : '/'
+const appPath = (path: string) => `${base}${path}`
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     VitePWA({
@@ -16,25 +20,25 @@ export default defineConfig({
         background_color: '#f7f7f4',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/',
-        scope: '/',
+        start_url: base,
+        scope: base,
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+          { src: appPath('icon-192.png'), sizes: '192x192', type: 'image/png' },
+          { src: appPath('icon-512.png'), sizes: '512x512', type: 'image/png' },
+          { src: appPath('maskable-512.png'), sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ],
         shortcuts: [
-          { name: 'Search', short_name: 'Search', url: '/search' },
-          { name: 'Watch Inbox', short_name: 'Inbox', url: '/inbox' }
+          { name: 'Search', short_name: 'Search', url: appPath('search') },
+          { name: 'Watch Inbox', short_name: 'Inbox', url: appPath('inbox') }
         ],
         share_target: {
-          action: '/share-target',
+          action: appPath('share-target'),
           method: 'GET',
           params: { title: 'title', text: 'text', url: 'url' }
         }
       },
       workbox: {
-        navigateFallback: '/index.html',
+        navigateFallback: 'index.html',
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
         runtimeCaching: [
           {
