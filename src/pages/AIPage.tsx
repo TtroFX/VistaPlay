@@ -1,11 +1,29 @@
-import { Bot, CheckCircle2, Clipboard, ExternalLink, FileJson, ShieldCheck } from 'lucide-react'
+import { Bot, CheckCircle2, ExternalLink, FileJson, ShieldCheck } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { VideoCard } from '../components/VideoCard'
 import type { Recommendation } from '../domain/types'
 import { buildRecommendationPrompt, parseAIImport } from '../lib/aiBridge'
+import { playerEngine } from '../player/PlayerEngine'
 import { verifyVideoIds } from '../lib/youtube'
 import { useApp } from '../store/AppStore'
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.readOnly = true
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.append(textarea)
+    textarea.select()
+    try { return document.execCommand('copy') }
+    finally { textarea.remove() }
+  }
+}
 
 export default function AIPage() {
   const app = useApp()
@@ -52,10 +70,30 @@ export default function AIPage() {
   }), [preset, question, count, duration, language, shortsEnabled, shorts, liveEnabled, live, history, current, app.state.history, app.state.videos])
   useEffect(() => () => importRequest.current?.abort(), [])
 
-  async function copyPrompt() {
+  async function openChatGPT() {
     if (!promptEnabled) return
-    await navigator.clipboard.writeText(prompt)
-    app.notify('PromptをClipboardへコピーしました', 'success')
+    const nativeBridge = window.VistaPlayNative
+    const copied = await copyText(prompt)
+    if (!copied && !nativeBridge) {
+      app.notify('PromptをClipboardへコピーできませんでした', 'error')
+      return
+    }
+    playerEngine.prepareExternalNavigation()
+    if (nativeBridge) {
+      try {
+        nativeBridge.postMessage(JSON.stringify({ type: 'openChatGPT', prompt }))
+        app.notify('Promptをコピーしました', 'success')
+        return
+      } catch { /* fall through to web/intent */ }
+    }
+    app.notify('Promptをコピーしました', 'success')
+    if (/Android/i.test(navigator.userAgent)) {
+      const fallback = encodeURIComponent('https://chatgpt.com/')
+      window.location.href = `intent://chatgpt.com/#Intent;scheme=https;package=com.openai.chatgpt;S.browser_fallback_url=${fallback};end`
+      return
+    }
+    const opened = window.open('https://chatgpt.com/', '_blank', 'noopener,noreferrer')
+    if (!opened) window.location.href = 'https://chatgpt.com/'
   }
 
   async function importJson() {
@@ -70,12 +108,7 @@ export default function AIPage() {
       const parsed = parseAIImport(input)
       if (parsed.type === 'youtube_search') {
         if (!smartSearchEnabled) throw new Error('Smart SearchはSettingsで無効です')
-        const entry = {
-          id: crypto.randomUUID(),
-          query: parsed.searches.map((item) => item.query).join(' / '),
-          videoIds: [],
-          createdAt: new Date().toISOString(),
-        }
+        const entry = { id: crypto.randomUUID(), query: parsed.searches.map((item) => item.query).join(' / '), videoIds: [], createdAt: new Date().toISOString() }
         app.recordAIImport(entry)
         sessionStorage.setItem('vistaplay-smart-search', JSON.stringify(parsed))
         setStatus(`${parsed.searches.length}件の検索Queryを検証しました。`)
@@ -103,7 +136,7 @@ export default function AIPage() {
   }
 
   return <div className="page ai-page">
-    <div className="page-heading"><div><span className="eyebrow"><Bot />CLIPBOARD BRIDGE</span><h1>ChatGPT Recommendations</h1><p>OpenAI APIは使いません。Promptをcopyし、ChatGPTのstrict JSONを貼り付けます。</p></div></div>
+    <div className="page-heading"><div><span className="eyebrow"><Bot />CHATGPT BRIDGE</span><h1>ChatGPT Recommendations</h1><p>OpenAI APIは使いません。Promptは起動時に自動でClipboardへコピーし、ChatGPTのstrict JSONをVistaPlayへ貼り付けます。</p></div></div>
     {!promptEnabled && !importEnabled && <div className="capability-notice"><ShieldCheck /><div><strong>ChatGPT Bridgeの機能は無効です</strong><p>Prompt BuilderまたはAI ImportをSettingsで有効にすると利用できます。</p></div></div>}
     <div className="ai-flow">
       {promptEnabled && <section className="ai-builder">
@@ -119,7 +152,7 @@ export default function AIPage() {
           <label className="check-label"><input type="checkbox" checked={history} onChange={(event) => setHistory(event.target.checked)} />最近の視聴履歴を参考にする（最大20件）</label>
         </div>
         <textarea className="prompt-preview" value={prompt} readOnly />
-        <div className="builder-actions"><button className="primary-button" onClick={() => void copyPrompt()}><Clipboard />Prompt Copy</button><a className="secondary-button" href="https://chatgpt.com/" target="_blank" rel="noreferrer"><ExternalLink />chatgpt.comを開く</a></div>
+        <div className="builder-actions"><button className="primary-button" onClick={() => void openChatGPT()}><ExternalLink />ChatGPTアプリで開く</button></div>
       </section>}
       {importEnabled && <section className="ai-import">
         <div className="flow-step"><span>{promptEnabled ? '2' : '1'}</span><div><h2>JSONを貼り付ける</h2><p>最大64KiB。実行可能CodeとHTMLは扱いません。</p></div></div>
