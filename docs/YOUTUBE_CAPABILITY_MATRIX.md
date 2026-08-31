@@ -4,7 +4,7 @@
 |---|---|---|
 | Playback | YouTube IFrame Player API | Direct video ID remains usable without Data API key |
 | Controls, ads, attribution | YouTube iframe controls remain visible | VistaPlay controls are outside the frame and do not intercept touch |
-| Metadata/search/channel/playlist/comments | YouTube Data API v3 with origin-restricted browser key | Local metadata and direct URL playback remain available |
+| Metadata/search/channel/playlist/comments | YouTube Data API v3 with origin-restricted browser key; Channel URLs accept canonical IDs and `@handle` resolution | Local metadata and direct URL playback remain available |
 | Subscriptions / new uploads | Google OAuth `youtube.readonly`; subscriptions and local-favorite channels are merged on explicit Home refresh | At most 100 subscriptions, 25 channels and three recent uploads per channel per refresh; no background polling |
 | Captions | YouTube Player standard caption UI | No iframe scraping; translation only for separately permitted text |
 | Live | Embedded Player; official live chat embed | Live entry points disappear when disabled |

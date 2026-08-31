@@ -64,6 +64,8 @@ export function parseYouTubeInput(value: string): { type: 'video' | 'channel' | 
       if (playlist) return { type: 'playlist', id: playlist }
       const channel = url.pathname.match(/^\/channel\/([^/]+)/)?.[1]
       if (channel) return { type: 'channel', id: channel }
+      const handle = decodeURIComponent(url.pathname).match(/^\/(@[^/]+)\/?$/)?.[1]
+      if (handle && handle.length <= 101) return { type: 'channel', id: handle }
     } catch { /* Try the next URL candidate. */ }
   }
   return undefined
@@ -269,14 +271,16 @@ export async function fetchComments(videoId: string, pageToken?: string, order: 
 
 export interface ChannelDetails { channelId: string; title: string; description?: string; thumbnail?: string; subscriberCount?: number; videoCount?: number }
 
-export async function fetchChannel(channelId: string, signal?: AbortSignal): Promise<ChannelDetails> {
-  const cached = await cacheGet<ChannelDetails>(`channel:${channelId}`)
+export async function fetchChannel(channelReference: string, signal?: AbortSignal): Promise<ChannelDetails> {
+  const cached = await cacheGet<ChannelDetails>(`channel:${channelReference}`)
   if (cached) return cached.value
-  const data = await apiFetch<{ items?: Array<{ id: string; snippet?: { title?: string; description?: string; thumbnails?: { high?: { url: string }; medium?: { url: string } } }; statistics?: { subscriberCount?: string; videoCount?: string } }> }>('channels', { part: 'snippet,statistics', id: channelId }, signal)
+  const referenceParam: Record<string, string> = channelReference.startsWith('@') ? { forHandle: channelReference } : { id: channelReference }
+  const data = await apiFetch<{ items?: Array<{ id: string; snippet?: { title?: string; description?: string; thumbnails?: { high?: { url: string }; medium?: { url: string } } }; statistics?: { subscriberCount?: string; videoCount?: string } }> }>('channels', { part: 'snippet,statistics', ...referenceParam }, signal)
   const item = data.items?.[0]
   if (!item) throw new Error('Channel is unavailable')
   const value = { channelId: item.id, title: item.snippet?.title ?? 'Channel', description: item.snippet?.description, thumbnail: item.snippet?.thumbnails?.high?.url ?? item.snippet?.thumbnails?.medium?.url, subscriberCount: item.statistics?.subscriberCount ? Number(item.statistics.subscriberCount) : undefined, videoCount: item.statistics?.videoCount ? Number(item.statistics.videoCount) : undefined }
-  await storeCache(`channel:${channelId}`, value, METADATA_TTL)
+  await storeCache(`channel:${channelReference}`, value, METADATA_TTL)
+  if (channelReference !== item.id) await storeCache(`channel:${item.id}`, value, METADATA_TTL)
   return value
 }
 

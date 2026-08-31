@@ -27,7 +27,10 @@ export default function ChannelPage() {
     request.current?.abort(); const controller = new AbortController(); request.current = controller; const currentGeneration = ++generation.current
     setLoading(true); setLoadingMore(false); setError(''); setVideos([]); setNextTokens({})
     const kinds: ChannelKind[] = activeTab === 'live' ? ['live', ...(upcomingEnabled ? ['upcoming' as const] : [])] : ['video']
-    Promise.all([fetchChannel(id, controller.signal), Promise.all(kinds.map(async (kind) => ({ kind, ...await listChannelVideos(id, kind, undefined, controller.signal) }))) ]).then(([details, results]) => {
+    fetchChannel(id, controller.signal).then(async (details) => {
+      const results = await Promise.all(kinds.map(async (kind) => ({ kind, ...await listChannelVideos(details.channelId, kind, undefined, controller.signal) })))
+      return { details, results }
+    }).then(({ details, results }) => {
       if (generation.current !== currentGeneration) return
       setChannel(details)
       const all = [...new Map(results.flatMap((result) => result.items).map((video) => [video.videoId, video])).values()]
@@ -37,11 +40,11 @@ export default function ChannelPage() {
   }, [activeTab, id, upcomingEnabled])
   const loadMore = async () => {
     const entries = (Object.entries(nextTokens) as Array<[ChannelKind, string]>).filter(([, token]) => token)
-    if (!entries.length || loadingMore) return
+    if (!channel || !entries.length || loadingMore) return
     request.current?.abort(); const controller = new AbortController(); request.current = controller; const currentGeneration = ++generation.current
     setLoadingMore(true); setError('')
     try {
-      const results = await Promise.all(entries.map(async ([kind, token]) => ({ kind, ...await listChannelVideos(id, kind, token, controller.signal) })))
+      const results = await Promise.all(entries.map(async ([kind, token]) => ({ kind, ...await listChannelVideos(channel.channelId, kind, token, controller.signal) })))
       if (generation.current !== currentGeneration) return
       const additions = results.flatMap((result) => result.items)
       const combined = [...new Map([...videos, ...additions].map((video) => [video.videoId, video])).values()]
@@ -49,11 +52,12 @@ export default function ChannelPage() {
     } catch (reason) { if (!controller.signal.aborted && generation.current === currentGeneration) setError(reason instanceof Error ? reason.message : '動画を追加取得できませんでした') }
     finally { if (generation.current === currentGeneration) setLoadingMore(false) }
   }
-  const preference = app.state.channelPreferences.find((item) => item.channelId === id)
+  const preferenceChannelId = channel?.channelId ?? id
+  const preference = app.state.channelPreferences.find((item) => item.channelId === preferenceChannelId)
   const updatePref = (patch: Partial<Omit<ChannelPreference, 'channelId' | 'updatedAt'>>) => app.replaceState((current) => {
-    const existing = current.channelPreferences.find((item) => item.channelId === id)
-    const updated: ChannelPreference = { channelId: id, playbackRate: existing?.playbackRate, homePriority: existing?.homePriority ?? 0, hideFromHome: existing?.hideFromHome ?? false, shorts: existing?.shorts ?? 'default', queueAutoplay: existing?.queueAutoplay ?? true, ...patch, updatedAt: new Date().toISOString() }
-    return { ...current, channelPreferences: [...current.channelPreferences.filter((item) => item.channelId !== id), updated] }
+    const existing = current.channelPreferences.find((item) => item.channelId === preferenceChannelId)
+    const updated: ChannelPreference = { channelId: preferenceChannelId, playbackRate: existing?.playbackRate, homePriority: existing?.homePriority ?? 0, hideFromHome: existing?.hideFromHome ?? false, shorts: existing?.shorts ?? 'default', queueAutoplay: existing?.queueAutoplay ?? true, ...patch, updatedAt: new Date().toISOString() }
+    return { ...current, channelPreferences: [...current.channelPreferences.filter((item) => item.channelId !== preferenceChannelId), updated] }
   })
   return <div className="page channel-page">{channel && <section className="channel-hero">{channel.thumbnail ? <img src={channel.thumbnail} alt="" /> : <span><UsersRound /></span>}<div><span className="eyebrow">CHANNEL</span><h1>{channel.title}</h1><p>{channel.description}</p><small>{channel.subscriberCount !== undefined ? `${Intl.NumberFormat('ja', { notation: 'compact' }).format(channel.subscriberCount)} subscribers` : 'Subscriber count unavailable'}</small></div><button className={`secondary-button ${preference?.homePriority ? 'active' : ''}`} onClick={() => updatePref({ homePriority: preference?.homePriority ? 0 : 1 })}><Heart />Local favorite</button></section>}
     <div className="tabs">{[['videos', 'Videos'], ...(shortsEnabled ? [['shorts', 'Shorts']] : []), ...(liveEnabled ? [['live', 'Live']] : [])].map(([key, label]) => <button className={activeTab === key ? 'active' : ''} onClick={() => setTab(key as 'videos' | 'shorts' | 'live')} key={key}>{key === 'live' ? <Radio /> : <UsersRound />}{label}</button>)}</div>

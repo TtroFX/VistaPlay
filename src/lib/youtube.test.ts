@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { dbPut } from '../data/db'
 import type { SearchFilters } from '../domain/types'
-import { extractChapters, extractTimestamps, fetchLatestUploads, fetchPlaylist, fetchSubscriptionChannelIds, parseDuration, parseYouTubeInput, parseYouTubeVideoId, searchRemote } from './youtube'
+import { extractChapters, extractTimestamps, fetchChannel, fetchLatestUploads, fetchPlaylist, fetchSubscriptionChannelIds, parseDuration, parseYouTubeInput, parseYouTubeVideoId, searchRemote } from './youtube'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -12,6 +12,7 @@ describe('YouTube parsing', () => {
   it('recognizes video, channel and playlist links', () => {
     expect(parseYouTubeInput('https://youtu.be/dQw4w9WgXcQ')?.type).toBe('video')
     expect(parseYouTubeInput('https://www.youtube.com/channel/UC123')?.id).toBe('UC123')
+    expect(parseYouTubeInput('https://www.youtube.com/@GoogleDevelopers')?.id).toBe('@GoogleDevelopers')
     expect(parseYouTubeInput('https://www.youtube.com/playlist?list=PL123')?.type).toBe('playlist')
     expect(parseYouTubeInput('https://example.com/watch?v=dQw4w9WgXcQ')).toBeUndefined()
   })
@@ -35,6 +36,15 @@ describe('YouTube parsing', () => {
     vi.stubGlobal('fetch', fetchMock)
     await expect(fetchSubscriptionChannelIds('provider-token')).resolves.toEqual(['UC-one', 'UC-two'])
     expect(fetchMock.mock.calls[0][1]?.headers).toEqual({ Authorization: 'Bearer provider-token' })
+  })
+  it('resolves a channel handle to its canonical channel ID', async () => {
+    vi.stubEnv('VITE_YOUTUBE_API_KEY', 'test-key')
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ items: [{ id: 'UC-canonical', snippet: { title: 'Google for Developers' }, statistics: { subscriberCount: '1000' } }] }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(fetchChannel('@GoogleDevelopers')).resolves.toMatchObject({ channelId: 'UC-canonical', title: 'Google for Developers', subscriberCount: 1000 })
+    const requested = new URL(String(fetchMock.mock.calls[0][0]))
+    expect(requested.searchParams.get('forHandle')).toBe('@GoogleDevelopers')
+    expect(requested.searchParams.has('id')).toBe(false)
   })
   it('resolves upload playlists and verifies their video metadata', async () => {
     const fetchMock = vi.fn()
