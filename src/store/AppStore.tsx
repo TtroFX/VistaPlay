@@ -9,6 +9,8 @@ import { recordDiagnostic } from '../lib/diagnostics'
 import { playerEngine, type PlayerSnapshot } from '../player/PlayerEngine'
 import { mergeCloudStates, stampSyncMetadata } from '../sync/conflicts'
 
+type AppStateChange = PersistedAppState | ((current: PersistedAppState) => PersistedAppState)
+
 interface AppContextValue {
   state: PersistedAppState
   hydrated: boolean
@@ -43,7 +45,7 @@ interface AppContextValue {
   setVideoRate: (videoId: string, rate?: number) => void
   patchSettings: (patch: Partial<PersistedAppState['settings']>) => void
   setFeature: (key: FeatureKey, value: boolean) => void
-  replaceState: (state: PersistedAppState) => void
+  replaceState: (change: AppStateChange) => void
   acceptExternalState: (state: PersistedAppState, reconcile?: boolean) => void
   upsertVideos: (videos: VideoRef[]) => void
   addSearchHistory: (query: string) => void
@@ -305,7 +307,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   // UI-level aggregate edits still need the same revision and conflict clocks as
   // the focused store actions above. Only trusted restore/sync boundaries may
   // install an already-versioned state without creating another local edit.
-  const replaceState = useCallback((next: PersistedAppState) => mutate(() => next), [mutate])
+  const replaceState = useCallback((change: AppStateChange) => mutate((current) => typeof change === 'function' ? change(current) : change), [mutate])
   const acceptExternalState = useCallback((next: PersistedAppState, reconcile = false) => setState((current) => {
     const accepted = reconcile ? mergeCloudStates(current, next) : next
     latestState.current = accepted
