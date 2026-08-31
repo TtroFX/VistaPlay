@@ -31,12 +31,13 @@ export default function SearchPage() {
   if (!restored.current) { try { restored.current = JSON.parse(sessionStorage.getItem(RESTORE_KEY) ?? 'null') } catch { restored.current = null } }
   const requestedQuery = params.get('q')
   const isHistoryReturn = navigationType === 'POP' && location.key !== 'default'
-  const canRestore = isHistoryReturn && !smartSearch && Boolean(restored.current) && (!requestedQuery || requestedQuery === restored.current?.query)
-  const [query, setQuery] = useState(smartSearch?.searches[0].query ?? requestedQuery ?? (canRestore ? restored.current?.query : '') ?? '')
-  const [filters, setFilters] = useState<SearchFilters>(canRestore ? restored.current?.filters ?? defaults : defaults)
-  const [results, setResults] = useState<SearchResult[]>(canRestore ? restored.current?.results ?? [] : [])
-  const [next, setNext] = useState<string | undefined>(canRestore ? restored.current?.next : undefined)
-  const [sort, setSort] = useState<SearchSort>(canRestore ? restored.current?.sort ?? 'relevance' : 'relevance')
+  const canRestoreState = !smartSearch && Boolean(restored.current) && (!requestedQuery || requestedQuery === restored.current?.query)
+  const shouldRestoreScroll = canRestoreState && isHistoryReturn
+  const [query, setQuery] = useState(smartSearch?.searches[0].query ?? requestedQuery ?? (canRestoreState ? restored.current?.query : '') ?? '')
+  const [filters, setFilters] = useState<SearchFilters>(canRestoreState ? restored.current?.filters ?? defaults : defaults)
+  const [results, setResults] = useState<SearchResult[]>(canRestoreState ? restored.current?.results ?? [] : [])
+  const [next, setNext] = useState<string | undefined>(canRestoreState ? restored.current?.next : undefined)
+  const [sort, setSort] = useState<SearchSort>(canRestoreState ? restored.current?.sort ?? 'relevance' : 'relevance')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [smartSummary, setSmartSummary] = useState('')
@@ -44,11 +45,11 @@ export default function SearchPage() {
   const searchRequest = useRef<AbortController | undefined>(undefined)
   const searchGeneration = useRef(0)
   const dismissFilters = useTemporaryHistory(showFilters, () => setShowFilters(false), 'search-filters')
-  const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: canRestore ? restored.current?.scroll ?? 0 : 0 })
+  const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: shouldRestoreScroll ? restored.current?.scroll ?? 0 : 0 })
   latest.current = { query, filters, results, next, sort, scroll: latest.current.scroll }
 
   useLayoutEffect(() => {
-    if (!canRestore) return
+    if (!shouldRestoreScroll) return
     const top = restored.current?.scroll ?? 0
     const root = document.documentElement
     const priorBehavior = root.style.scrollBehavior
