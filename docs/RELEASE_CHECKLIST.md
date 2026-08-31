@@ -2,12 +2,12 @@
 
 ## Automated gate
 
-- [ ] Clean dependency install
-- [ ] TypeScript typecheck
-- [ ] ESLint without errors
-- [ ] Unit tests: feature dependencies, player math, AI validation, YouTube parsing, statistics, IndexedDB
-- [ ] Production build and generated service worker
-- [ ] Manifest includes 192/512/maskable icons and share target
+- [x] Clean dependency install
+- [x] TypeScript typecheck
+- [x] ESLint without errors
+- [x] Unit tests: feature dependencies, player math, AI validation, YouTube parsing, statistics, IndexedDB
+- [x] Production build and generated service worker
+- [x] Manifest includes 192/512/maskable icons and share target
 
 ## Browser smoke
 
@@ -35,3 +35,5 @@
 ## Release record
 
 Record branch, commit SHA, build output, test counts, preview URL, environment key names (never values), connected-capability results and remaining browser/device limitations. Do not mark the release complete while any mandatory automated or primary-flow gate is failing.
+
+Latest automated record (2026-08-31): source checkpoint `181589b` on `feature/production-v1`; clean install, typecheck, lint, 15 test files / 60 tests, production build, 47-entry PWA precache, manifest/share target and local SPA route delivery passed. GitHub Actions run `33377007862` passed. Interactive browser and connected-capability boxes remain open until a reachable preview with deployment environment values is available.
