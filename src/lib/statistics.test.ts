@@ -17,6 +17,20 @@ describe('statistics aggregation', () => {
     expect(result.heatmap['10:00']).toBeCloseTo(10)
     expect(result.heatmap['10:30']).toBeCloseTo(10)
   })
+  it('allocates paused playback from its actual playing intervals', () => {
+    const result = calculateStatistics([session({
+      startedAt: '2026-08-29T10:00:00',
+      endedAt: '2026-08-29T12:30:10',
+      realElapsedSeconds: 20,
+      watchedMediaSeconds: 20,
+      playbackRates: [{ rate: 1, realSeconds: 20 }],
+      playingIntervals: [
+        { startedAt: '2026-08-29T10:00:00', endedAt: '2026-08-29T10:00:10', realSeconds: 10 },
+        { startedAt: '2026-08-29T12:30:00', endedAt: '2026-08-29T12:30:10', realSeconds: 10 }
+      ]
+    })])
+    expect(result.heatmap).toEqual({ '10:00': 10, '12:30': 10 })
+  })
   it('allows negative time saved at slower-than-real media progress', () => {
     expect(calculateStatistics([session({ watchedMediaSeconds: 20, realElapsedSeconds: 40, playbackRates: [{ rate: .5, realSeconds: 40 }] })]).timeSavedSeconds).toBe(-20)
   })

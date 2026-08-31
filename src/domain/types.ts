@@ -39,6 +39,7 @@ export interface WatchSession {
   realElapsedSeconds: number
   playbackRates: Array<{ rate: number; realSeconds: number }>
   seekEvents: Array<{ from: number; to: number; at: string }>
+  playingIntervals?: Array<{ startedAt: string; endedAt: string; realSeconds: number }>
   completionRate: number
 }
 export interface Folder { id: string; name: string; parentId?: string; videoIds: string[]; pinned: boolean; updatedAt: string }

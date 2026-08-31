@@ -16,6 +16,8 @@ interface ActiveSession {
   media: number
   rates: Map<number, number>
   seekEvents: WatchSession['seekEvents']
+  playingIntervals: NonNullable<WatchSession['playingIntervals']>
+  intervalStartedAt?: string
   pendingWatchSeconds: number
   lastPosition: number
   duration: number
@@ -66,9 +68,13 @@ export function PersistentPlayer() {
       session.current = {
         id: crypto.randomUUID(), videoId: current.videoId, channelId: current.channelId,
         startedAt: new Date().toISOString(), real: 0, media: 0, rates: new Map(), seekEvents: [],
+        playingIntervals: [], intervalStartedAt: new Date().toISOString(),
         pendingWatchSeconds: 0, lastPosition: app.player.position, duration: app.player.duration
       }
+    } else if (app.player.state === 'playing' && session.current && !session.current.intervalStartedAt) {
+      session.current.intervalStartedAt = new Date().toISOString()
     } else if (app.player.state !== 'playing' && session.current) {
+      closePlayingInterval()
       updateSessionSnapshot()
       flushProgress()
       if (app.player.state === 'ended' || app.player.state === 'error' || app.player.state === 'idle') finishSession()
@@ -143,12 +149,22 @@ export function PersistentPlayer() {
     active.pendingWatchSeconds = 0
   }
 
+  function closePlayingInterval() {
+    const active = session.current
+    if (!active?.intervalStartedAt) return
+    const accountedSeconds = active.playingIntervals.reduce((sum, interval) => sum + interval.realSeconds, 0)
+    const realSeconds = Math.max(0, active.real - accountedSeconds)
+    if (realSeconds > 0) active.playingIntervals.push({ startedAt: active.intervalStartedAt, endedAt: new Date().toISOString(), realSeconds })
+    active.intervalStartedAt = undefined
+  }
+
   function finishSession() {
+    closePlayingInterval()
     updateSessionSnapshot()
     flushProgress()
     const value = session.current
     if (!value || value.real < 0.25) { session.current = undefined; return }
-    latest.current.app.recordSession({ sessionId: value.id, videoId: value.videoId, channelId: value.channelId, startedAt: value.startedAt, endedAt: new Date().toISOString(), watchedMediaSeconds: value.media, realElapsedSeconds: value.real, playbackRates: [...value.rates].map(([rate, realSeconds]) => ({ rate, realSeconds })), seekEvents: value.seekEvents, completionRate: value.duration ? Math.min(1, value.lastPosition / value.duration) : 0 })
+    latest.current.app.recordSession({ sessionId: value.id, videoId: value.videoId, channelId: value.channelId, startedAt: value.startedAt, endedAt: new Date().toISOString(), watchedMediaSeconds: value.media, realElapsedSeconds: value.real, playbackRates: [...value.rates].map(([rate, realSeconds]) => ({ rate, realSeconds })), seekEvents: value.seekEvents, playingIntervals: value.playingIntervals, completionRate: value.duration ? Math.min(1, value.lastPosition / value.duration) : 0 })
     session.current = undefined
   }
 

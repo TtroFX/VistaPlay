@@ -17,6 +17,8 @@ Constraints enforced in code:
 
 `UNWATCHED → WATCHING → COMPLETED → ARCHIVED`. Playback below 10 seconds does not promote to Watching. Completed is sticky across replay until explicit reset. Completion requires at least 90% position and the defined minimum watch time.
 
+`WatchSession` stores total real/media playing seconds, rate-weighted intervals and seek events. It also records each actual PLAYING interval so pauses do not shift Heatmap time into buckets where playback did not occur; older sessions without interval data retain the continuous-session fallback.
+
 ## IndexedDB
 
 Schema version 3 stores settings, videos, queue, progress, sessions, library, cache and migration records. Before a version upgrade, all existing stores are copied to `vistaplay-backups`; snapshots older than seven days are removed only after a successful backup write.
