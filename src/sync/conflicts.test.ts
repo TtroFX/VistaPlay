@@ -17,14 +17,21 @@ describe('cloud conflict resolution', () => {
   it('merges settings per leaf clock and excludes local-only cloud data', () => {
     const local = createDefaultState(); const remote = createDefaultState()
     local.settings.theme.accent = '#111111'; local.syncMetadata.settings['theme.accent'] = '2026-01-03T00:00:00.000Z'
+    local.settings.layout.rightPaneWidth = 512; local.syncMetadata.settings['layout.rightPaneWidth'] = '2026-01-01T00:00:00.000Z'
     remote.settings.theme.accent = '#222222'; remote.settings.playback.globalRate = 1.5
+    remote.settings.layout.rightPaneWidth = 304
     remote.syncMetadata.settings['theme.accent'] = '2026-01-02T00:00:00.000Z'; remote.syncMetadata.settings['playback.globalRate'] = '2026-01-04T00:00:00.000Z'
+    remote.syncMetadata.settings['layout.rightPaneWidth'] = '2026-01-05T00:00:00.000Z'
     const result = mergeCloudStates(local, remote)
     expect(result.settings.theme.accent).toBe('#111111')
     expect(result.settings.playback.globalRate).toBe(1.5)
+    expect(result.settings.layout.rightPaneWidth).toBe(512)
     local.videos.a = { videoId: 'a', title: 'Local cache' }; local.aiImportHistory = [{ id: 'x', query: 'q', videoIds: ['a'], createdAt: new Date().toISOString() }]
-    expect(prepareCloudState(local).videos).toEqual({})
-    expect(prepareCloudState(local).aiImportHistory).toEqual([])
+    const prepared = prepareCloudState(local)
+    expect(prepared.videos).toEqual({})
+    expect(prepared.aiImportHistory).toEqual([])
+    expect(prepared.settings.layout).not.toHaveProperty('rightPaneWidth')
+    expect(prepared.syncMetadata.settings).not.toHaveProperty('layout.rightPaneWidth')
   })
 
   it('keeps collection and history deletions from resurrecting on another device', () => {

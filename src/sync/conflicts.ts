@@ -1,8 +1,13 @@
 import { createDefaultState } from '../config/features'
-import type { AppSettings, PersistedAppState, SyncMetadata, SyncTombstoneKey, WatchProgress } from '../domain/types'
+import type { AppSettings, LayoutSettings, PersistedAppState, SyncMetadata, SyncTombstoneKey, WatchProgress } from '../domain/types'
 
 const EPOCH = new Date(0).toISOString()
 const SET_FIELDS = ['favorites', 'watchLater', 'inbox'] as const
+const LOCAL_SETTING_PATHS = new Set(['layout.rightPaneWidth'])
+
+type CloudAppState = Omit<PersistedAppState, 'settings'> & {
+  settings: Omit<AppSettings, 'layout'> & { layout: Omit<LayoutSettings, 'rightPaneWidth'> }
+}
 
 function later(a?: string, b?: string): string {
   return (a ?? EPOCH) >= (b ?? EPOCH) ? (a ?? EPOCH) : (b ?? EPOCH)
@@ -137,7 +142,15 @@ export function mergeCloudStates(localInput: PersistedAppState, remoteInput: Per
   const syncMetadata = mergedMetadata(local.syncMetadata, remote.syncMetadata)
   const folders = mergeUpdatedVisible(local.folders, remote.folders, (item) => item.id, syncMetadata.removed.folders)
   const tags = mergeUpdatedVisible(local.tags, remote.tags, (item) => item.id, syncMetadata.removed.tags)
-  const settings = mergeSettingsValue(local.settings, remote.settings, '', local, remote) as AppSettings
+  const mergedSettings = mergeSettingsValue(local.settings, remote.settings, '', local, remote) as AppSettings
+  const settings: AppSettings = {
+    ...mergedSettings,
+    layout: {
+      ...mergedSettings.layout,
+      // Pane width is calibrated per device and never accepted from cloud state.
+      rightPaneWidth: local.settings.layout.rightPaneWidth,
+    },
+  }
   return {
     ...local,
     settings,
@@ -160,16 +173,22 @@ export function mergeCloudStates(localInput: PersistedAppState, remoteInput: Per
   }
 }
 
-export function prepareCloudState(state: PersistedAppState, now = Date.now()): PersistedAppState {
+export function prepareCloudState(state: PersistedAppState, now = Date.now()): CloudAppState {
   const cutoff = now - 30 * 86400000
   const metadata = ensureSyncMetadata(state)
   const prune = (values: Record<string, string>) => Object.fromEntries(Object.entries(values).filter(([, at]) => Date.parse(at) >= cutoff))
   const removed = Object.fromEntries((Object.keys(metadata.removed) as SyncTombstoneKey[]).map((field) => [field, prune(metadata.removed[field])])) as SyncMetadata['removed']
+  const cloudLayout = Object.fromEntries(
+    Object.entries(state.settings.layout).filter(([key]) => key !== 'rightPaneWidth')
+  ) as Omit<LayoutSettings, 'rightPaneWidth'>
+  const cloudSettingClocks = Object.fromEntries(Object.entries(metadata.settings).filter(([path]) => !LOCAL_SETTING_PATHS.has(path)))
   return {
     ...state,
+    settings: { ...state.settings, layout: cloudLayout },
     videos: {}, aiImportHistory: [], lastPlayer: undefined,
     syncMetadata: {
       ...metadata,
+      settings: cloudSettingClocks,
       removed
     }
   }
