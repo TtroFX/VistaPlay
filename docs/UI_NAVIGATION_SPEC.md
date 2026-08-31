@@ -19,6 +19,7 @@ The YouTube iframe is never covered by gesture interception or custom controls. 
 - Search requests occur only on submit. Result state, filters, and scroll live in session storage so Back restores context.
 - Modal/temporary UI is visually layered. Browser Back handles route state; player state remains independent.
 - Shared video URLs route to Watch. Channel and Playlist links route to their canonical screens.
+- `/settings/features` and `/settings/connections` are focused settings routes; the general `/settings` route remains the complete control center.
 
 ## Watch layouts
 
