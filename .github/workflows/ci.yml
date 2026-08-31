@@ -15,7 +15,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,3 +27,9 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - name: Install browser smoke runner
+        run: |
+          npm install --no-save --package-lock=false @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Browser smoke
+        run: npx playwright test --config=e2e/playwright.config.mjs
