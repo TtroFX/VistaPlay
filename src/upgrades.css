@@ -1,6 +1,7 @@
 /* Compatibility and tablet-first refinements layered after the production stylesheet. */
 
 :root {
+  --accent: #f6c945;
   --accent-ink: color-mix(in srgb, var(--accent) 72%, black);
   --accent-border: color-mix(in srgb, var(--accent) 78%, black);
   --accent-active: color-mix(in srgb, var(--accent) 15%, var(--surface));
@@ -16,7 +17,167 @@
   background: var(--accent-active);
 }
 .primary-button { border-color: var(--accent-border); }
-input[type='range'], input[type='checkbox'], progress { accent-color: var(--accent-ink); }
+progress { accent-color: var(--accent-ink); }
+
+/* Browser/Android native picker chrome is suppressed. VistaPlay's control layer handles interaction. */
+select,
+input[type='date'],
+input[type='color'],
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] { -webkit-tap-highlight-color: transparent; }
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 44px;
+  padding-right: 42px !important;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 17px) calc(50% - 2px), calc(100% - 12px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+select::-ms-expand { display: none; }
+
+input[type='date'] {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 44px;
+  border-radius: 11px;
+  cursor: pointer;
+}
+input[type='date']::-webkit-calendar-picker-indicator { opacity: 0; display: none; pointer-events: none; }
+
+input[type='color'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 58px;
+  height: 44px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+}
+input[type='color']::-webkit-color-swatch-wrapper { padding: 0; }
+input[type='color']::-webkit-color-swatch { border: 0; border-radius: 8px; }
+
+input[type='checkbox']:not(.toggle-row input),
+input[type='radio'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  margin: 0 8px 0 0;
+  border: 1.5px solid color-mix(in srgb, var(--muted) 65%, var(--border));
+  background: var(--surface);
+  vertical-align: middle;
+  cursor: pointer;
+}
+input[type='checkbox']:not(.toggle-row input) { border-radius: 6px; }
+input[type='radio'] { border-radius: 50%; }
+input[type='checkbox']:not(.toggle-row input):checked {
+  border-color: var(--accent-border);
+  background-color: var(--accent-ink);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' d='m3.2 8.3 3 3 6.6-6.7'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 15px;
+}
+input[type='radio']:checked { border: 5px solid var(--accent-ink); }
+input[type='checkbox']:disabled, input[type='radio']:disabled { opacity: .45; cursor: not-allowed; }
+
+input[type='range'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-height: 32px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type='range']::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 22%, var(--surface-3)); }
+input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--accent-ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+}
+input[type='range']::-moz-range-track { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 22%, var(--surface-3)); }
+input[type='range']::-moz-range-thumb { width: 18px; height: 18px; border: 3px solid var(--surface); border-radius: 50%; background: var(--accent-ink); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+
+/* VistaPlay picker sheet. This replaces Android/WebView select, color and date dialogs. */
+.vp-control-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(10, 14, 12, .42);
+  backdrop-filter: blur(8px);
+  animation: vp-control-fade var(--small) var(--ease) both;
+}
+.vp-control-sheet {
+  width: min(620px, 100%);
+  max-height: min(78vh, 760px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent));
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 96%, var(--accent) 4%);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .24);
+  animation: vp-control-rise var(--panel) var(--ease) both;
+}
+.vp-control-sheet > header { position: sticky; top: -18px; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: -18px -18px 14px; padding: 18px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(18px); }
+.vp-control-sheet > header span { display: block; margin-bottom: 3px; color: var(--accent-ink); font-size: 10px; font-weight: 800; letter-spacing: .13em; }
+.vp-control-sheet > header h2 { margin: 0; font-size: 20px; }
+.vp-option-list { display: grid; gap: 7px; }
+.vp-option { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 0 15px; border: 1px solid transparent; border-radius: 13px; background: var(--surface-2); color: var(--text); text-align: left; }
+.vp-option.selected { border-color: color-mix(in srgb, var(--accent) 52%, var(--border)); background: var(--accent-active); color: var(--accent-ink); font-weight: 700; }
+.vp-option svg { width: 18px; }
+
+.vp-color-picker { display: grid; gap: 18px; }
+.vp-color-preview { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface-2); }
+.vp-color-preview > span { width: 42px; height: 42px; border: 1px solid color-mix(in srgb, var(--text) 12%, transparent); border-radius: 11px; box-shadow: inset 0 0 0 2px rgba(255,255,255,.28); }
+.vp-color-preview strong { letter-spacing: .05em; }
+.vp-color-presets { display: grid; grid-template-columns: repeat(5, minmax(48px, 1fr)); gap: 10px; }
+.vp-color-presets button { aspect-ratio: 1.35; display: grid; place-items: center; border: 2px solid transparent; border-radius: 13px; background: var(--swatch); box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+.vp-color-presets button.selected { border-color: var(--text); transform: translateY(-1px); box-shadow: 0 5px 14px rgba(0,0,0,.14); }
+.vp-color-presets button svg { width: 18px; color: #fff; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+.vp-color-sliders { display: grid; gap: 12px; }
+.vp-color-sliders label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
+.vp-color-sliders label > span { display: flex; justify-content: space-between; }
+.vp-color-sliders strong { color: var(--text); }
+.vp-color-sliders label:first-child input[type='range']::-webkit-slider-runnable-track { background: linear-gradient(90deg, #f33, #ff0, #3f3, #0ff, #33f, #f0f, #f33); }
+.vp-color-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.vp-color-footer input { min-width: 0; min-height: 48px; padding: 0 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); text-transform: uppercase; font-weight: 700; letter-spacing: .06em; }
+
+.vp-calendar { display: grid; gap: 12px; }
+.vp-calendar-heading { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; text-align: center; }
+.vp-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.vp-weekdays { color: var(--muted); font-size: 12px; font-weight: 700; text-align: center; }
+.vp-weekdays span { padding: 6px 0; }
+.vp-calendar-grid button { min-width: 0; aspect-ratio: 1; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--text); }
+.vp-calendar-grid button:hover { background: var(--surface-2); }
+.vp-calendar-grid button.outside { color: var(--faint); }
+.vp-calendar-grid button.selected { border-color: var(--accent-border); background: var(--accent-ink); color: #fff; font-weight: 800; }
+.vp-calendar-footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 6px; }
+@keyframes vp-control-fade { from { opacity: 0; } }
+@keyframes vp-control-rise { from { transform: translateY(16px); opacity: .7; } }
 
 /* Settings uses the same content width contract as every other page. */
 .settings-page { width: 100%; max-width: 1560px !important; margin-inline: auto !important; }
@@ -24,6 +185,8 @@ input[type='range'], input[type='checkbox'], progress { accent-color: var(--acce
 @media (min-width: 720px) and (orientation: landscape) {
   .settings-page .setting-grid,
   .settings-page .feature-groups { width: 100%; }
+  .vp-control-backdrop { align-items: center; }
+  .vp-control-sheet { border-radius: 22px; }
 }
 
 /* Folder hierarchy is explicit without turning the tablet library into a dense desktop tree. */
@@ -54,6 +217,9 @@ input[type='range'], input[type='checkbox'], progress { accent-color: var(--acce
 @media (max-width: 720px) {
   .folder-tree-node > .folder-card { margin-left: min(calc(var(--folder-depth, 0) * 20px), 60px); }
   .folder-tree-node > .folder-card.subfolder::before { left: -10px; width: 8px; }
+  .vp-control-backdrop { padding: 10px; }
+  .vp-control-sheet { max-height: 84vh; padding: 16px; border-radius: 22px 22px 18px 18px; }
+  .vp-control-sheet > header { top: -16px; margin: -16px -16px 12px; padding: 16px; }
 }
 
-@media (prefers-reduced-motion: reduce) { .page { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .page, .vp-control-backdrop, .vp-control-sheet { animation: none !important; } }
