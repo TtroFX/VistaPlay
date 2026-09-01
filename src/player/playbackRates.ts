@@ -1,5 +1,5 @@
-export const VISTAPLAY_PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 6, 8] as const
-export const VISTAPLAY_STANDARD_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 6, 8] as const
+export const VISTAPLAY_PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4] as const
+export const VISTAPLAY_STANDARD_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4] as const
 export const REQUIRED_PLAYBACK_RATES = VISTAPLAY_STANDARD_RATES
 
 export function isVistaPlayRate(rate: number): boolean {

@@ -1,6 +1,6 @@
-export type PlaybackBackendId = 'none' | 'web-media'
-export type PlaybackProvider = 'youtube' | 'web' | 'local'
-export type PlaybackStateName = 'idle' | 'cued' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error'
+export type PlaybackBackendId = 'none' | 'html-media'
+export type PlaybackProvider = 'web' | 'local'
+export type PlaybackStateName = 'idle' | 'loading' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error'
 export type PlaybackRateMode = 'native-rate' | 'unavailable'
 
 export interface PlaybackCapabilities {
@@ -23,10 +23,17 @@ export interface PlaybackBackendSnapshot {
   supportedRates: number[]
   muted: boolean
   volume: number
+  buffered?: number
   error?: string
 }
 
-export type PlaybackMedia = { provider: 'web' | 'local'; element: HTMLMediaElement }
+export interface PlaybackMediaSource {
+  provider: PlaybackProvider
+  src: string
+  mimeType?: string
+}
+
+export type PlaybackMedia = PlaybackMediaSource
 
 export interface PlaybackMountRequest {
   host: HTMLElement

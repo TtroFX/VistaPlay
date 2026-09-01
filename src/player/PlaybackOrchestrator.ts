@@ -1,4 +1,4 @@
-import { WebMediaBackend } from './backends/WebMediaBackend'
+import { HTMLMediaBackend } from './backends/HTMLMediaBackend'
 import { isVistaPlayRate } from './playbackRates'
 import type { PlaybackBackend, PlaybackBackendSnapshot, PlaybackCapabilities, PlaybackMedia, PlaybackSnapshot } from './types'
 
@@ -30,6 +30,7 @@ export class PlaybackOrchestrator extends EventTarget {
     supportedRates: [1],
     muted: false,
     volume: 100,
+    buffered: 0,
     capabilities: EMPTY_CAPABILITIES,
   }
 
@@ -53,11 +54,11 @@ export class PlaybackOrchestrator extends EventTarget {
     })
   }
 
-  async mountMedia(host: HTMLElement, media: Extract<PlaybackMedia, { provider: 'web' | 'local' }>, startSeconds = 0, desiredRate = 1): Promise<void> {
+  async mountMedia(host: HTMLElement, media: PlaybackMedia, startSeconds = 0, desiredRate = 1): Promise<void> {
     this.transientRate = undefined
     this.lastRequestedRate = undefined
     if (isVistaPlayRate(desiredRate)) this.emit({ desiredRate })
-    if (!this.backend || this.backend.id !== 'web-media') this.installBackend(new WebMediaBackend())
+    if (!this.backend || this.backend.id !== 'html-media') this.installBackend(new HTMLMediaBackend())
     const backend = this.backend
     if (!backend) return
     await backend.mount({ host, media, startSeconds, desiredRate: this.snapshotValue.desiredRate })
@@ -80,6 +81,7 @@ export class PlaybackOrchestrator extends EventTarget {
       duration: 0,
       actualRate: 1,
       supportedRates: [...capabilities.supportedRates],
+      buffered: 0,
       capabilities,
       error: undefined,
     })
@@ -157,6 +159,7 @@ export class PlaybackOrchestrator extends EventTarget {
       duration: 0,
       actualRate: 1,
       supportedRates: [1],
+      buffered: 0,
       capabilities: EMPTY_CAPABILITIES,
       error: undefined,
     }
