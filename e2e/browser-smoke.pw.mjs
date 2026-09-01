@@ -143,7 +143,7 @@ test('tablet shell, direct Watch, persistent mini player, queue and IndexedDB pe
   expect(blockingErrors, blockingErrors.join('\n')).toEqual([])
 })
 
-test('Search Back restores query, results and scroll position', async ({ page }) => {
+test('Search Back restores query and results but resets scroll to top', async ({ page }) => {
   await installYouTubeStub(page)
   await seedSearchResults(page)
   const blockingErrors = watchBlockingErrors(page)
@@ -165,12 +165,12 @@ test('Search Back restores query, results and scroll position', async ({ page })
   })
   await expect(page).toHaveURL(/\/watch\?v=/)
   const storedSearchState = await page.evaluate(() => JSON.parse(sessionStorage.getItem('vistaplay-search-state') ?? 'null'))
-  expect(storedSearchState?.scroll).toBeGreaterThan(500)
+  expect(storedSearchState?.scroll).toBe(0)
   await page.goBack()
   await expect(page).toHaveURL(/\/search$/)
   await expect(input).toHaveValue('smoke-seed')
   await expect(page.locator('.video-card')).toHaveCount(30)
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500)
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
 
   expect(blockingErrors, blockingErrors.join('\n')).toEqual([])
 })
