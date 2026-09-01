@@ -26,6 +26,7 @@ const AIPage = lazy(() => import('./pages/AIPage'))
 const StatisticsPage = lazy(() => import('./pages/StatisticsPage'))
 const DiscoverPage = lazy(() => import('./pages/DiscoverPage'))
 const ShareTargetPage = lazy(() => import('./pages/ShareTargetPage'))
+const PlaybackDiagnosticsPage = lazy(() => import('./pages/PlaybackDiagnosticsPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 installRuntimeDiagnostics()
@@ -63,6 +64,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="statistics" element={<FeatureGuard feature="statistics"><StatisticsPage /></FeatureGuard>} />
             <Route path="discover" element={<FeatureGuard feature="customRecommendation"><DiscoverPage /></FeatureGuard>} />
             <Route path="share-target" element={<ShareTargetPage />} />
+            <Route path="diagnostics/playback" element={<PlaybackDiagnosticsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
