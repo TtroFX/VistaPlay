@@ -43,14 +43,15 @@ export class PlaybackOrchestrator extends EventTarget {
   }
 
   private handleBackendSnapshot = (backendSnapshot: PlaybackBackendSnapshot): void => {
-    if (!this.backend) return
-    const capabilities = this.backend.getCapabilities()
+    const backend = this.backend
+    if (!backend) return
+    const capabilities = backend.getCapabilities()
     const previousRates = this.snapshotValue.supportedRates.join(',')
     const nextRates = capabilities.supportedRates.join(',')
     if (this.lastRequestedRate !== undefined && Math.abs(backendSnapshot.actualRate - this.lastRequestedRate) < 0.001) this.lastRequestedRate = undefined
     this.emit({
       ...backendSnapshot,
-      backend: this.backend.id,
+      backend: backend.id,
       supportedRates: [...capabilities.supportedRates],
       capabilities,
     })
@@ -63,8 +64,11 @@ export class PlaybackOrchestrator extends EventTarget {
     if (isVistaPlayRate(desiredRate)) this.emit({ desiredRate })
     const backendId = hasAndroidPlaybackBridge() ? 'android-extended' : 'youtube-iframe'
     if (!this.backend || this.backend.id !== backendId) this.installBackend(backendId === 'android-extended' ? new AndroidExtendedBackend() : new YouTubeIFrameBackend())
-    await this.backend.mount({ host, media: { provider: 'youtube', id: videoId }, startSeconds, desiredRate: this.snapshotValue.desiredRate })
-    this.handleBackendSnapshot(this.backend.snapshot)
+    const backend = this.backend
+    if (!backend) return
+    await backend.mount({ host, media: { provider: 'youtube', id: videoId }, startSeconds, desiredRate: this.snapshotValue.desiredRate })
+    if (this.backend !== backend) return
+    this.handleBackendSnapshot(backend.snapshot)
     this.applyEffectiveRate()
   }
 
@@ -73,8 +77,11 @@ export class PlaybackOrchestrator extends EventTarget {
     this.lastRequestedRate = undefined
     if (isVistaPlayRate(desiredRate)) this.emit({ desiredRate })
     if (!this.backend || this.backend.id !== 'web-media') this.installBackend(new WebMediaBackend())
-    await this.backend.mount({ host, media, startSeconds, desiredRate: this.snapshotValue.desiredRate })
-    this.handleBackendSnapshot(this.backend.snapshot)
+    const backend = this.backend
+    if (!backend) return
+    await backend.mount({ host, media, startSeconds, desiredRate: this.snapshotValue.desiredRate })
+    if (this.backend !== backend) return
+    this.handleBackendSnapshot(backend.snapshot)
     this.applyEffectiveRate()
   }
 
@@ -139,6 +146,7 @@ export class PlaybackOrchestrator extends EventTarget {
   pause(): void { this.backend?.pause() }
   toggle(): void { this.backend?.toggle() }
   seekTo(seconds: number): void { this.backend?.seekTo(seconds) }
+  seekBy(seconds: number): void { this.seekTo(this.snapshotValue.position + seconds) }
   toggleMute(): void { this.backend?.toggleMute() }
   setVolume(volume: number): void { this.backend?.setVolume(volume) }
 

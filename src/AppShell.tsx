@@ -20,6 +20,7 @@ export function AppShell() {
   const swipeBack = useCallback(() => navigate(-1), [navigate])
   const swipeRef = useEdgeSwipeBack(swipeBack)
   const previousPathname = useRef(location.pathname)
+  const supportedRateKey = app.player.supportedRates.join(',')
 
   useEffect(() => {
     const previous = window.history.scrollRestoration
@@ -68,12 +69,20 @@ export function AppShell() {
           if (result === 'unavailable') app.notify('このブラウザではFullscreenを利用できません', 'error')
         }).catch(() => { recordDiagnostic('player', 'Fullscreen request failed'); app.notify('Fullscreenへ切り替えられませんでした', 'error') })
       }
-      else if (event.shiftKey && event.key === ',') { const rates = app.player.availableRates; const index = rates.indexOf(app.player.rate); playerEngine.setRate(rates[Math.max(0, index - 1)] ?? app.player.rate) }
-      else if (event.shiftKey && event.key === '.') { const rates = app.player.availableRates; const index = rates.indexOf(app.player.rate); playerEngine.setRate(rates[Math.min(rates.length - 1, index + 1)] ?? app.player.rate) }
+      else if (event.shiftKey && event.key === ',') {
+        const rates = app.player.supportedRates
+        const index = rates.indexOf(app.player.actualRate)
+        playerEngine.setDesiredRate(rates[Math.max(0, index - 1)] ?? app.player.actualRate)
+      }
+      else if (event.shiftKey && event.key === '.') {
+        const rates = app.player.supportedRates
+        const index = rates.indexOf(app.player.actualRate)
+        playerEngine.setDesiredRate(rates[Math.min(rates.length - 1, index + 1)] ?? app.player.actualRate)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [app.player.availableRates, app.player.rate])
+  }, [app.player.actualRate, supportedRateKey])
 
   if (!app.hydrated) {
     return <div className="app-boot" role="status" aria-live="polite">

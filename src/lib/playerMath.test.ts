@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { countsAsWatched, isCompleted, resolvePlaybackEndAction, resolvePlaybackRate, shouldPersistProgress } from './playerMath'
+import { countsAsWatched, isCompleted, resolvePlaybackEndAction, shouldPersistProgress } from './playerMath'
 
 describe('player rules', () => {
-  it('chooses the slower rate on an equal-distance tie', () => {
-    expect(resolvePlaybackRate(1.375, [1, 1.25, 1.5, 2])).toBe(1.25)
-  })
   it('uses completion and watched-time guardrails', () => {
     expect(isCompleted(91, 100, 24)).toBe(false)
     expect(isCompleted(91, 100, 25)).toBe(true)

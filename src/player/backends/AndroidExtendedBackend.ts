@@ -44,9 +44,7 @@ export class AndroidExtendedBackend implements PlaybackBackend {
   }
 
   getCapabilities(): PlaybackCapabilities {
-    const supportedRates = this.agentReady
-      ? [...VISTAPLAY_PLAYBACK_RATES]
-      : [...this.delegate.getCapabilities().supportedRates]
+    const supportedRates = this.agentReady ? [...VISTAPLAY_PLAYBACK_RATES] : [...this.delegate.getCapabilities().supportedRates]
     return {
       backend: this.id,
       label: this.agentReady ? 'VistaPlay Extended' : 'VistaPlay Extended（初期化中）',
@@ -99,12 +97,13 @@ export class AndroidExtendedBackend implements PlaybackBackend {
 
   private handleBridgeMessage(raw: string): void {
     try {
-      const message = JSON.parse(raw) as { type?: string; rate?: number }
+      const message = JSON.parse(raw) as { type?: string; rate?: number; extendedPlayback?: boolean }
+      if (message.type === 'native:capabilities' && message.extendedPlayback) {
+        this.postBridge({ type: 'client:setRate', rate: this.requestedRate })
+        return
+      }
       if (message.type === 'agent:ready') {
-        this.agentReady = true
-        this.lastAgentRate = undefined
-        this.emit({ supportedRates: [...VISTAPLAY_PLAYBACK_RATES] })
-        this.setRate(this.requestedRate)
+        this.postBridge({ type: 'client:setRate', rate: this.requestedRate })
         return
       }
       if (message.type === 'agent:state' && typeof message.rate === 'number' && Number.isFinite(message.rate)) {

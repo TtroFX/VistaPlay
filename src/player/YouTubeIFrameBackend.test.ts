@@ -1,17 +1,20 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { YouTubeNamespace } from './backends/YouTubeIFrameBackend'
 
 const apiSelector = 'script[src="https://www.youtube.com/iframe_api"]'
+type TestWindow = Window & typeof globalThis & { YT?: YouTubeNamespace; onYouTubeIframeAPIReady?: () => void }
+const target = window as TestWindow
 
 function installYouTubeNamespace(): void {
-  window.YT = {
+  target.YT = {
     Player: class {} as never,
-    PlayerState: { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 }
+    PlayerState: { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 },
   }
 }
 
 afterEach(() => {
-  delete window.YT
-  delete window.onYouTubeIframeAPIReady
+  delete target.YT
+  delete target.onYouTubeIframeAPIReady
   document.querySelectorAll(apiSelector).forEach((script) => script.remove())
   vi.useRealTimers()
   vi.restoreAllMocks()
@@ -20,7 +23,7 @@ afterEach(() => {
 
 describe('loadYouTubeApi', () => {
   it('shares one script and promise across concurrent consumers', async () => {
-    const { loadYouTubeApi } = await import('./PlayerEngine')
+    const { loadYouTubeApi } = await import('./backends/YouTubeIFrameBackend')
     const first = loadYouTubeApi()
     const second = loadYouTubeApi()
 
@@ -28,28 +31,28 @@ describe('loadYouTubeApi', () => {
     expect(document.querySelectorAll(apiSelector)).toHaveLength(1)
 
     installYouTubeNamespace()
-    window.onYouTubeIframeAPIReady?.()
+    target.onYouTubeIframeAPIReady?.()
 
-    await expect(first).resolves.toBe(window.YT)
-    await expect(second).resolves.toBe(window.YT)
+    await expect(first).resolves.toBe(target.YT)
+    await expect(second).resolves.toBe(target.YT)
   })
 
   it('preserves a callback registered before VistaPlay', async () => {
     const previous = vi.fn()
-    window.onYouTubeIframeAPIReady = previous
-    const { loadYouTubeApi } = await import('./PlayerEngine')
+    target.onYouTubeIframeAPIReady = previous
+    const { loadYouTubeApi } = await import('./backends/YouTubeIFrameBackend')
 
     const pending = loadYouTubeApi()
     installYouTubeNamespace()
-    window.onYouTubeIframeAPIReady?.()
+    target.onYouTubeIframeAPIReady?.()
 
     await pending
     expect(previous).toHaveBeenCalledOnce()
-    expect(window.onYouTubeIframeAPIReady).toBe(previous)
+    expect(target.onYouTubeIframeAPIReady).toBe(previous)
   })
 
   it('removes a failed script and allows a clean retry', async () => {
-    const { loadYouTubeApi } = await import('./PlayerEngine')
+    const { loadYouTubeApi } = await import('./backends/YouTubeIFrameBackend')
     const first = loadYouTubeApi()
     document.querySelector<HTMLScriptElement>(apiSelector)?.dispatchEvent(new Event('error'))
 
@@ -61,13 +64,13 @@ describe('loadYouTubeApi', () => {
     expect(document.querySelectorAll(apiSelector)).toHaveLength(1)
 
     installYouTubeNamespace()
-    window.onYouTubeIframeAPIReady?.()
-    await expect(second).resolves.toBe(window.YT)
+    target.onYouTubeIframeAPIReady?.()
+    await expect(second).resolves.toBe(target.YT)
   })
 
   it('cleans up a timed-out load before retrying', async () => {
     vi.useFakeTimers()
-    const { loadYouTubeApi } = await import('./PlayerEngine')
+    const { loadYouTubeApi } = await import('./backends/YouTubeIFrameBackend')
     const pending = loadYouTubeApi()
     const rejection = expect(pending).rejects.toThrow('timed out')
 

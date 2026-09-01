@@ -1,9 +1,16 @@
 import type { YouTubeNamespace } from './backends/YouTubeIFrameBackend'
 
+type NativeBridgeMessageEvent = { data: string }
+interface NativeMessageBridge {
+  postMessage(message: string): void
+  onmessage: ((event: NativeBridgeMessageEvent) => void) | null
+}
+
 declare global {
   interface Window {
     YT?: YouTubeNamespace
     onYouTubeIframeAPIReady?: () => void
+    VistaPlayNative?: NativeMessageBridge
   }
 }
 
