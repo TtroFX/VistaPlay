@@ -1,5 +1,5 @@
 import { recordDiagnostic } from '../../lib/diagnostics'
-import { resolveSupportedRate, VISTAPLAY_STANDARD_RATES } from '../playbackRates'
+import { isVistaPlayRate, resolveSupportedRate, VISTAPLAY_STANDARD_RATES } from '../playbackRates'
 import type { PlaybackBackend, PlaybackBackendSnapshot, PlaybackCapabilities, PlaybackMountRequest, PlaybackStateName } from '../types'
 
 export type YTPlayerState = -1 | 0 | 1 | 2 | 3 | 5
@@ -354,9 +354,23 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
   }
 
   setRate(rate: number): void {
-    if (!Number.isFinite(rate) || !this.snapshot.supportedRates.includes(rate)) return
+    if (!Number.isFinite(rate) || !isVistaPlayRate(rate)) return
     this.requestedRate = rate
-    this.player?.setPlaybackRate(rate)
+    const player = this.player
+    if (!player) return
+
+    try { player.setPlaybackRate(rate) }
+    catch { return }
+
+    window.setTimeout(() => {
+      if (player !== this.player || this.probingRates) return
+      try {
+        const actualRate = player.getPlaybackRate()
+        const supportedRates = new Set(this.snapshot.supportedRates)
+        if (sameRate(actualRate, rate)) supportedRates.add(rate)
+        this.emit({ actualRate, supportedRates: normalizeRates([...supportedRates]) })
+      } catch { /* Player may be transitioning. */ }
+    }, RATE_PROBE_SETTLE_MS * RATE_PROBE_ATTEMPTS)
   }
 
   toggleMute(): void {
