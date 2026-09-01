@@ -40,8 +40,6 @@ jobs:
         with:
           gradle-version: '9.5.0'
       - run: npm ci
-      - name: Install CDP client
-        run: npm install --no-save --package-lock=false playwright-core@1.55.0
       - name: Assemble Android debug app
         run: gradle -p android :app:assembleDebug --stacktrace
       - name: Enable KVM access
