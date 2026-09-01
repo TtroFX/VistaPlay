@@ -1,6 +1,6 @@
 import { ResolverPool } from './ResolverPool'
-import { PipedResolver } from './resolvers/PipedResolver'
-import { discoverPipedInstances, PIPED_BOOTSTRAP_INSTANCES } from './resolvers/pipedInstances'
+import { InvidiousResolver } from './resolvers/InvidiousResolver'
+import { discoverInvidiousInstances, INVIDIOUS_BOOTSTRAP_INSTANCES } from './resolvers/invidiousInstances'
 import type { ResolvedMedia } from './types'
 
 let resolverPool: ResolverPool | undefined
@@ -9,11 +9,11 @@ let resolverPoolPromise: Promise<ResolverPool> | undefined
 async function getResolverPool(): Promise<ResolverPool> {
   if (resolverPool) return resolverPool
   if (!resolverPoolPromise) {
-    resolverPoolPromise = discoverPipedInstances()
-      .catch(() => [...PIPED_BOOTSTRAP_INSTANCES])
+    resolverPoolPromise = discoverInvidiousInstances()
+      .catch(() => [...INVIDIOUS_BOOTSTRAP_INSTANCES])
       .then((instances) => {
-        const candidates = [...new Set([...instances, ...PIPED_BOOTSTRAP_INSTANCES])].slice(0, 8)
-        resolverPool = new ResolverPool(candidates.map((instance) => new PipedResolver(instance)), { timeoutMs: 4000 })
+        const candidates = [...new Set([...instances, ...INVIDIOUS_BOOTSTRAP_INSTANCES])].slice(0, 8)
+        resolverPool = new ResolverPool(candidates.map((instance) => new InvidiousResolver(instance)), { timeoutMs: 4500 })
         return resolverPool
       })
   }

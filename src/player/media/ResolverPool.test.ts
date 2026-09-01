@@ -3,13 +3,13 @@ import type { MediaResolver } from './MediaResolver'
 import { ResolverPool } from './ResolverPool'
 import type { ResolvedMedia } from './types'
 
-function media(videoId: string): ResolvedMedia {
+function media(videoId: string, instance = 'test'): ResolvedMedia {
   return {
     provider: 'youtube',
     videoId,
     streams: [{ url: 'https://media.example/video.mp4', videoOnly: false, audioOnly: false, proxied: true }],
     resolvedAt: Date.now(),
-    resolver: { type: 'custom', instance: 'test' },
+    resolver: { type: 'custom', instance },
   }
 }
 
@@ -27,5 +27,23 @@ describe('ResolverPool', () => {
     await expect(pool.resolve('abc123')).resolves.toMatchObject({ videoId: 'abc123' })
     expect(fail).toHaveBeenCalledTimes(1)
     expect(succeed).toHaveBeenCalledTimes(1)
+  })
+
+  it('prefers a previously successful resolver and avoids retrying a known failure first', async () => {
+    const order: string[] = []
+    const first: MediaResolver = {
+      id: 'first',
+      resolve: vi.fn(async () => { order.push('first'); throw new Error('down') }),
+    }
+    const second: MediaResolver = {
+      id: 'second',
+      resolve: vi.fn(async (videoId: string) => { order.push('second'); return media(videoId, 'second') }),
+    }
+    const pool = new ResolverPool([first, second], { timeoutMs: 100 })
+
+    await pool.resolve('one')
+    order.length = 0
+    await pool.resolve('two')
+    expect(order[0]).toBe('second')
   })
 })

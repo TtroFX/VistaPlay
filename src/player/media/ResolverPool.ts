@@ -72,12 +72,15 @@ export class ResolverPool {
 
   private rankResolver(id: string, now: number): number {
     const health = this.health.get(id)
-    if (!health) return 1_000_000
+    if (!health) return 500_000
     const coolingDown = health.failures >= this.failureThreshold && health.lastFailure !== undefined && now - health.lastFailure < this.cooldownMs
     if (coolingDown) return 10_000_000 + health.failures * 1000
-    const successBonus = health.lastSuccess ? Math.min(500_000, Math.max(0, now - health.lastSuccess)) : 750_000
     const latency = health.latency ?? 5000
-    return successBonus + health.failures * 10_000 + latency
+    if (health.lastSuccess !== undefined) {
+      const agePenalty = Math.min(300_000, Math.max(0, now - health.lastSuccess))
+      return agePenalty + latency + health.failures * 10_000
+    }
+    return 1_000_000 + health.failures * 10_000 + latency
   }
 
   private async resolveWithTimeout(resolver: MediaResolver, videoId: string, parentSignal?: AbortSignal): Promise<ResolvedMedia> {

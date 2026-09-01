@@ -115,7 +115,7 @@ export function PersistentPlayer() {
   return <section className={`persistent-player ${full ? 'player-full' : 'player-mini'}`} aria-label="VistaPlay動画プレイヤー">
     <div className="player-frame" ref={frameRef}>
       <div className="vistaplay-media-host" ref={hostRef} />
-      {resolverState === 'resolving' && <div className="player-resolver-state" role="status"><strong>再生ソースを取得中</strong><span>Piped resolver poolを確認しています…</span></div>}
+      {resolverState === 'resolving' && <div className="player-resolver-state" role="status"><strong>再生ソースを取得中</strong><span>media resolver poolを確認しています…</span></div>}
       {(resolverState === 'error' || app.player.state === 'error') && <div className="player-error" role="alert"><strong>再生できません</strong><span>{resolverError || app.player.error || 'Media playback failed'}</span><a href={`https://www.youtube.com/watch?v=${current.videoId}`} target="_blank" rel="noreferrer">YouTubeで開く</a></div>}
     </div>
     <div className="player-control-shell">
