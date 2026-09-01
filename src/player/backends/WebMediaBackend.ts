@@ -42,7 +42,6 @@ export class WebMediaBackend implements PlaybackBackend {
   }
 
   async mount(request: PlaybackMountRequest): Promise<void> {
-    if (request.media.provider === 'youtube') throw new Error('WebMediaBackend requires a directly controllable HTMLMediaElement')
     this.detachMedia()
     this.media = request.media.element
     for (const event of this.mediaEvents) this.media.addEventListener(event, this.sync)

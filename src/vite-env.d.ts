@@ -10,3 +10,16 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+interface VistaPlayNativeMessageEvent {
+  data: string
+}
+
+interface VistaPlayNativeBridge {
+  postMessage(message: string): void
+  onmessage: ((event: VistaPlayNativeMessageEvent) => void) | null
+}
+
+interface Window {
+  VistaPlayNative?: VistaPlayNativeBridge
+}
