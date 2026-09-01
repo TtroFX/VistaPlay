@@ -1,0 +1,15 @@
+{
+  "name": "vistaplay-media-relay-worker",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "check": "wrangler deploy --dry-run --outdir .wrangler-dist"
+  },
+  "dependencies": {
+    "youtubei.js": "18.0.0"
+  },
+  "devDependencies": {
+    "wrangler": "4.127.1"
+  }
+}
