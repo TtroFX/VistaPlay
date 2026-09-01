@@ -1,28 +1,19 @@
 import { ResolverPool } from './ResolverPool'
 import { NativePipedResolver } from './resolvers/NativePipedResolver'
-import { PipedResolver } from './resolvers/PipedResolver'
 import { RelayResolver } from './resolvers/RelayResolver'
 import type { ResolvedMedia } from './types'
 
-// Current high-priority entries from TeamPiped's maintained public-instance list.
-// Keep native Android and browser fallback lists aligned.
-const PIPED_INSTANCES = [
-  'https://pipedapi.kavin.rocks',
-  'https://pipedapi.leptons.xyz',
-  'https://pipedapi.nosebs.ru',
-  'https://pipedapi-libre.kavin.rocks',
-  'https://piped-api.privacy.com.de',
-  'https://pipedapi.adminforge.de',
-] as const
-
 const configuredRelayBase = import.meta.env.VITE_MEDIA_RELAY_BASE?.trim()
+const relayResolver = configuredRelayBase ? new RelayResolver(configuredRelayBase) : new RelayResolver()
 const nativeBridge = typeof window === 'undefined' ? undefined : window.VistaPlayNative
-const resolvers = configuredRelayBase
-  ? [new RelayResolver(configuredRelayBase)]
-  : nativeBridge
-    ? [new NativePipedResolver(nativeBridge)]
-    : PIPED_INSTANCES.map((instance) => new PipedResolver(instance))
-const resolverPool = new ResolverPool(resolvers, { timeoutMs: nativeBridge && !configuredRelayBase ? 60_000 : 4_500 })
+
+// PWA is the primary playback target. Always resolve through the VistaPlay relay so
+// browser CORS and third-party public-instance availability are not part of playback.
+// The Android bridge remains a secondary fallback only for the packaged app.
+const resolvers = nativeBridge
+  ? [relayResolver, new NativePipedResolver(nativeBridge)]
+  : [relayResolver]
+const resolverPool = new ResolverPool(resolvers, { timeoutMs: 15_000 })
 
 export async function resolveYoutubeMedia(videoId: string, signal?: AbortSignal): Promise<ResolvedMedia> {
   if (signal?.aborted) throw new DOMException('Resolution aborted', 'AbortError')
