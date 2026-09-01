@@ -16,9 +16,6 @@ jobs:
   verify-live-playback:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      MEDIA_RELAY_BASE: https://vistaplay-media-relay-ibukioike2009-7645s-projects.vercel.app
-      VITE_MEDIA_RELAY_BASE: https://vistaplay-media-relay-ibukioike2009-7645s-projects.vercel.app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,27 +23,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Verify media relay health
-        run: |
-          node --input-type=module <<'NODE'
-          const base = process.env.MEDIA_RELAY_BASE
-          const response = await fetch(`${base}/api/health`, { redirect: 'manual' })
-          const body = await response.text()
-          console.log(`relay status=${response.status}`)
-          console.log(`relay url=${response.url}`)
-          console.log(`relay location=${response.headers.get('location') ?? 'missing'}`)
-          console.log(`relay cors=${response.headers.get('access-control-allow-origin') ?? 'missing'}`)
-          console.log(`relay server=${response.headers.get('server') ?? 'missing'}`)
-          console.log(`relay x-vercel-id=${response.headers.get('x-vercel-id') ?? 'missing'}`)
-          console.log(`relay content-type=${response.headers.get('content-type') ?? 'missing'}`)
-          console.log(`relay body=${body.slice(0, 1200)}`)
-          if (response.status !== 200) process.exit(1)
-          if (response.headers.get('access-control-allow-origin') !== '*') process.exit(1)
-          NODE
       - run: npm run build
       - name: Install Chromium
         run: |
           npm install --no-save --package-lock=false @playwright/test@1.55.0
           npx playwright install --with-deps chromium
-      - name: Verify public resolver playback and 4x
+      - name: Verify public Piped playback and 4x
         run: npx playwright test --config=e2e/playwright-live.config.mjs

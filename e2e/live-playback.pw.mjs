@@ -39,7 +39,7 @@ test('public resolver delivers a real YouTube stream to VistaPlay-owned video at
 
   const media = page.locator('.vistaplay-media')
   await expect(media).toBeVisible()
-  await expect(page.getByTestId('diag-resolver')).toContainText('invidious')
+  await expect(page.getByTestId('diag-resolver')).toContainText('piped')
   await expect(page.getByTestId('diag-stream')).toContainText('proxied')
 
   await page.getByRole('button', { name: '4x', exact: true }).click()

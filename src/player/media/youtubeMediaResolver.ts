@@ -1,9 +1,21 @@
 import { ResolverPool } from './ResolverPool'
-import { DEFAULT_MEDIA_RELAY_BASE, RelayResolver } from './resolvers/RelayResolver'
+import { PipedResolver } from './resolvers/PipedResolver'
+import { RelayResolver } from './resolvers/RelayResolver'
 import type { ResolvedMedia } from './types'
 
-const configuredRelayBase = import.meta.env.VITE_MEDIA_RELAY_BASE?.trim() || DEFAULT_MEDIA_RELAY_BASE
-const resolverPool = new ResolverPool([new RelayResolver(configuredRelayBase)], { timeoutMs: 8_000 })
+const PIPED_INSTANCES = [
+  'https://pipedapi.kavin.rocks',
+  'https://pipedapi.leptons.xyz',
+  'https://pipedapi.nosebs.ru',
+  'https://pipedapi-libre.kavin.rocks',
+  'https://piped-api.privacy.com.de',
+] as const
+
+const configuredRelayBase = import.meta.env.VITE_MEDIA_RELAY_BASE?.trim()
+const resolvers = configuredRelayBase
+  ? [new RelayResolver(configuredRelayBase)]
+  : PIPED_INSTANCES.map((instance) => new PipedResolver(instance))
+const resolverPool = new ResolverPool(resolvers, { timeoutMs: 4_500 })
 
 export async function resolveYoutubeMedia(videoId: string, signal?: AbortSignal): Promise<ResolvedMedia> {
   if (signal?.aborted) throw new DOMException('Resolution aborted', 'AbortError')

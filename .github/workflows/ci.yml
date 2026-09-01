@@ -16,6 +16,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      VITE_MEDIA_RELAY_BASE: https://vistaplay-relay-ibukioike2009-7645s-projects.vercel.app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
