@@ -1,8 +1,6 @@
-name: Playback live probe
+name: Browser public Piped probe
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -13,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify-live-playback:
+  verify-browser-public-piped:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -28,5 +26,5 @@ jobs:
         run: |
           npm install --no-save --package-lock=false @playwright/test@1.55.0
           npx playwright install --with-deps chromium
-      - name: Verify public Piped playback and 4x
+      - name: Verify browser public Piped playback and 4x
         run: npx playwright test --config=e2e/playwright-live.config.mjs
