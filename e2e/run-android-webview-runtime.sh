@@ -17,6 +17,7 @@ collect_diagnostics() {
   adb shell cat /proc/net/unix > "${DIAG_DIR}/unix-sockets.txt" 2>&1
   adb shell dumpsys package "$PACKAGE" > "${DIAG_DIR}/package.txt" 2>&1
   adb shell dumpsys activity activities > "${DIAG_DIR}/activities.txt" 2>&1
+  adb shell dumpsys connectivity > "${DIAG_DIR}/connectivity.txt" 2>&1
   adb forward --list > "${DIAG_DIR}/adb-forwards.txt" 2>&1
   if [[ -f /tmp/vistaplay-webview-targets.json ]]; then
     cp /tmp/vistaplay-webview-targets.json "${DIAG_DIR}/webview-targets.json"
@@ -33,6 +34,23 @@ fi
 
 adb logcat -c || true
 adb install -r -t "$APK" 2>&1 | tee -a "$PROBE_LOG"
+
+network_ready=0
+for _ in $(seq 1 90); do
+  if adb shell dumpsys connectivity 2>/dev/null | grep -Eq 'Capabilities:.*INTERNET.*VALIDATED|Capabilities:.*VALIDATED.*INTERNET'; then
+    network_ready=1
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$network_ready" != "1" ]]; then
+  echo "Android emulator network did not become validated" | tee -a "$PROBE_LOG" >&2
+  adb shell dumpsys connectivity | tail -n 300 | tee -a "$PROBE_LOG" || true
+  exit 1
+fi
+
+echo "Android emulator network is validated" | tee -a "$PROBE_LOG"
 adb shell am force-stop "$PACKAGE" || true
 adb shell am start -W -n "$ACTIVITY" 2>&1 | tee -a "$PROBE_LOG"
 
