@@ -35,7 +35,7 @@ export const defaultSettings: AppSettings = {
     sidebarMode: 'expanded', sidebarOrder: ['home', 'search', 'channels', 'library', 'queue', 'history', 'inbox', 'settings'],
     sidebarHidden: [], cardSize: 'comfortable', rightPaneWidth: 360, defaultWatchTab: 'queue', focusMode: false, cinemaMode: false
   },
-  playback: { globalRate: 1, speedPresets: [1, 1.25, 1.5, 2, 2.5, 3, 4, 8], seekSeconds: 10, boostMode: 'next', continuousPlay: true },
+  playback: { globalRate: 1, speedPresets: [1, 1.25, 1.5, 2, 2.5, 3, 4], seekSeconds: 10, boostMode: 'next', continuousPlay: true },
   features: enabled,
   homeOrder: ['continue', 'inbox', 'new', 'recommended', 'categories', 'favorites'],
   homeHidden: [], cacheLimitMb: 250, cloudSync: false,

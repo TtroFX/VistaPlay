@@ -6,6 +6,7 @@ import { Sidebar } from './components/Sidebar'
 import { ToastViewport } from './components/ToastViewport'
 import { TopBar } from './components/TopBar'
 import { useEdgeSwipeBack } from './lib/useEdgeSwipeBack'
+import { PersistentPlayer } from './player/PersistentPlayer'
 import { useApp } from './store/AppStore'
 
 export function AppShell() {
@@ -63,11 +64,12 @@ export function AppShell() {
   const cinemaMode = fullPlayer && app.state.settings.layout.cinemaMode
   const configuredSidebar = app.state.settings.layout.sidebarMode
   const effectiveSidebar = (focusMode || cinemaMode) && configuredSidebar === 'expanded' ? 'compact' : configuredSidebar
-  return <div className={`app-shell sidebar-${effectiveSidebar} cards-${app.state.settings.layout.cardSize} ${focusMode ? 'focus-mode' : ''} ${cinemaMode ? 'cinema-mode' : ''}`}>
+  return <div className={`app-shell sidebar-${effectiveSidebar} cards-${app.state.settings.layout.cardSize} ${app.currentVideo && !fullPlayer ? 'has-mini-player' : ''} ${focusMode ? 'focus-mode' : ''} ${cinemaMode ? 'cinema-mode' : ''}`}>
     <Sidebar />
     <div className="app-column">
       {!focusMode && <TopBar />}
       <main ref={swipeRef} className={`main-content ${fullPlayer ? 'watch-stage' : ''}`}>
+        <PersistentPlayer />
         <Suspense fallback={<LoadingCards />}><Outlet /></Suspense>
       </main>
     </div>
