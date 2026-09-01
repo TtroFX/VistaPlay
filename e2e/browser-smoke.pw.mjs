@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 
 const VIDEO_A = 'dQw4w9WgXcQ'
 const VIDEO_B = 'M7lc1UVf-VE'
+const TEST_MEDIA = readFileSync(fileURLToPath(new URL('./fixtures/playback-smoke.webm', import.meta.url)))
 
 async function installYouTubeStub(page) {
   await page.route('https://raw.githubusercontent.com/iv-org/documentation/master/docs/instances.md', async (route) => {
@@ -20,71 +23,56 @@ async function installYouTubeStub(page) {
       contentType: 'application/json',
       headers: { 'Access-Control-Allow-Origin': '*' },
       body: JSON.stringify({
-        lengthSeconds: 600,
+        lengthSeconds: 2,
         formatStreams: [{
           url: `https://inv.nadeko.net/videoplayback?local=true&id=${encodeURIComponent(videoId)}`,
-          type: 'video/mp4; codecs="avc1.64001F, mp4a.40.2"',
-          quality: 'hd720',
-          qualityLabel: '720p',
-          resolution: '1280x720',
-          container: 'mp4',
-          bitrate: 1_500_000,
-          encoding: 'h264',
+          type: 'video/webm; codecs="vp8, opus"',
+          quality: 'tiny',
+          qualityLabel: '180p',
+          resolution: '320x180',
+          container: 'webm',
+          bitrate: 80_000,
+          encoding: 'vp8',
         }],
       }),
     })
   })
 
-  await page.addInitScript(() => {
-    const calls = []
-    Object.defineProperty(window, '__vistaplayYtCalls', { value: calls, configurable: true })
-    const nativeCreateElement = Document.prototype.createElement
-    Document.prototype.createElement = function createElement(name, options) {
-      const element = nativeCreateElement.call(this, name, options)
-      if (String(name).toLowerCase() !== 'video') return element
-
-      let paused = true
-      let currentTime = 0
-      Object.defineProperties(element, {
-        readyState: { configurable: true, get: () => HTMLMediaElement.HAVE_ENOUGH_DATA },
-        duration: { configurable: true, get: () => 600 },
-        paused: { configurable: true, get: () => paused },
-        currentTime: {
-          configurable: true,
-          get: () => currentTime,
-          set: (value) => {
-            currentTime = Number.isFinite(Number(value)) ? Number(value) : 0
-            element.dispatchEvent(new Event('timeupdate'))
-          },
-        },
-        buffered: {
-          configurable: true,
-          get: () => ({ length: 1, start: () => 0, end: () => 600 }),
-        },
-      })
-      element.load = () => {
-        queueMicrotask(() => {
-          element.dispatchEvent(new Event('loadstart'))
-          element.dispatchEvent(new Event('loadedmetadata'))
-          element.dispatchEvent(new Event('durationchange'))
-          element.dispatchEvent(new Event('canplay'))
-          element.dispatchEvent(new Event('progress'))
-        })
-      }
-      element.play = () => {
-        paused = false
-        calls.push(['play', element.src])
-        element.dispatchEvent(new Event('play'))
-        element.dispatchEvent(new Event('playing'))
-        return Promise.resolve()
-      }
-      element.pause = () => {
-        paused = true
-        calls.push(['pause', element.src])
-        element.dispatchEvent(new Event('pause'))
-      }
-      return element
+  await page.route('https://inv.nadeko.net/videoplayback**', async (route) => {
+    const range = route.request().headers().range
+    const commonHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-store',
     }
+    if (range) {
+      const match = range.match(/^bytes=(\d+)-(\d*)$/)
+      if (match) {
+        const start = Number(match[1])
+        const requestedEnd = match[2] ? Number(match[2]) : TEST_MEDIA.length - 1
+        const end = Math.min(requestedEnd, TEST_MEDIA.length - 1)
+        if (start <= end) {
+          const body = TEST_MEDIA.subarray(start, end + 1)
+          await route.fulfill({
+            status: 206,
+            contentType: 'video/webm',
+            headers: {
+              ...commonHeaders,
+              'Content-Range': `bytes ${start}-${end}/${TEST_MEDIA.length}`,
+              'Content-Length': String(body.length),
+            },
+            body,
+          })
+          return
+        }
+      }
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'video/webm',
+      headers: { ...commonHeaders, 'Content-Length': String(TEST_MEDIA.length) },
+      body: TEST_MEDIA,
+    })
   })
 }
 
@@ -145,10 +133,10 @@ test('tablet shell, resolver-backed 4x player, persistent mini player, queue and
   await expect(page.locator('.persistent-player.player-full')).toBeVisible()
   await expect(page.locator('.vistaplay-media')).toBeVisible()
   await expect(page.getByRole('button', { name: '再生' })).toBeEnabled()
+  expect(await page.locator('.vistaplay-media').evaluate((element) => element.paused)).toBe(true)
   await page.getByLabel('再生速度').selectOption('4')
   await expect.poll(() => page.locator('.vistaplay-media').evaluate((element) => element.playbackRate)).toBe(4)
   await expect(page.locator('.player-source-label')).toContainText('実再生 4x')
-  expect(await page.evaluate(() => window.__vistaplayYtCalls.filter(([kind]) => kind === 'play').length)).toBe(0)
 
   await page.getByRole('button', { name: 'お気に入り' }).click()
   await page.getByRole('button', { name: 'Queue', exact: true }).click()
