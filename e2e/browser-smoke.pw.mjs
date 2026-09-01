@@ -134,7 +134,7 @@ test('tablet shell, resolver-backed 4x player, persistent mini player, queue and
   await expect(page.locator('.vistaplay-media')).toBeVisible()
   await expect(page.getByRole('button', { name: '再生' })).toBeEnabled()
   expect(await page.locator('.vistaplay-media').evaluate((element) => element.paused)).toBe(true)
-  await page.getByLabel('再生速度').selectOption('4')
+  await page.getByLabel('再生速度', { exact: true }).selectOption('4')
   await expect.poll(() => page.locator('.vistaplay-media').evaluate((element) => element.playbackRate)).toBe(4)
   await expect(page.locator('.player-source-label')).toContainText('実再生 4x')
 
