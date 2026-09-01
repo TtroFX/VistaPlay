@@ -1,5 +1,5 @@
 import { recordDiagnostic } from '../../lib/diagnostics'
-import { resolveSupportedRate } from '../playbackRates'
+import { resolveSupportedRate, VISTAPLAY_STANDARD_RATES } from '../playbackRates'
 import type { PlaybackBackend, PlaybackBackendSnapshot, PlaybackCapabilities, PlaybackMountRequest, PlaybackStateName } from '../types'
 
 export type YTPlayerState = -1 | 0 | 1 | 2 | 3 | 5
@@ -35,11 +35,63 @@ type YoutubeWindow = Window & typeof globalThis & {
   onYouTubeIframeAPIReady?: () => void
 }
 
+type RateProbeDelay = (milliseconds: number) => Promise<void>
+
 const YOUTUBE_API_SRC = 'https://www.youtube.com/iframe_api'
+const EXTENDED_RATE_PROBE_CANDIDATES = VISTAPLAY_STANDARD_RATES.filter((rate) => rate > 2)
+const RATE_PROBE_SETTLE_MS = 35
+const RATE_PROBE_ATTEMPTS = 3
+const VIDEO_CUE_SETTLE_MS = 40
+const VIDEO_CUE_ATTEMPTS = 15
 let youtubeApiPromise: Promise<YouTubeNamespace> | undefined
 
 function youtubeWindow(): YoutubeWindow {
   return window as YoutubeWindow
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
+}
+
+function sameRate(left: number, right: number): boolean {
+  return Math.abs(left - right) < 0.001
+}
+
+function normalizeRates(rates: readonly number[]): number[] {
+  return [...new Set(rates.filter((rate) => Number.isFinite(rate) && rate > 0))].sort((a, b) => a - b)
+}
+
+/**
+ * The IFrame API documents setPlaybackRate as a suggestion and explicitly requires
+ * clients to observe the actual rate. VistaPlay therefore probes only its own >2x
+ * standard candidates and promotes a rate when getPlaybackRate confirms the exact
+ * value. Unsupported suggestions that YouTube rounds toward 1x are never promoted.
+ */
+export async function probeYouTubePlaybackRates(
+  player: YouTubePlayer,
+  advertisedRates: readonly number[] = player.getAvailablePlaybackRates(),
+  delay: RateProbeDelay = wait,
+): Promise<number[]> {
+  const supported = new Set(normalizeRates(advertisedRates))
+  const restoreRate = player.getPlaybackRate()
+
+  try {
+    for (const candidate of EXTENDED_RATE_PROBE_CANDIDATES) {
+      if (supported.has(candidate)) continue
+      player.setPlaybackRate(candidate)
+      let actualRate = player.getPlaybackRate()
+      for (let attempt = 0; attempt < RATE_PROBE_ATTEMPTS && !sameRate(actualRate, candidate); attempt += 1) {
+        await delay(RATE_PROBE_SETTLE_MS)
+        actualRate = player.getPlaybackRate()
+      }
+      if (sameRate(actualRate, candidate)) supported.add(candidate)
+    }
+  } finally {
+    try { player.setPlaybackRate(restoreRate) }
+    catch { /* Player may have been replaced while probing. */ }
+  }
+
+  return normalizeRates([...supported])
 }
 
 export function loadYouTubeApi(): Promise<YouTubeNamespace> {
@@ -116,6 +168,8 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
   private requestedRate = 1
   private optimisticVolume?: { value: number; until: number }
   private optimisticMuted?: { value: boolean; until: number }
+  private probingRates = false
+  private generation = 0
 
   snapshot: PlaybackBackendSnapshot = {
     ready: false,
@@ -130,12 +184,13 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
 
   getCapabilities(): PlaybackCapabilities {
     const supportedRates = this.snapshot.supportedRates.length ? [...this.snapshot.supportedRates] : [1]
+    const maximum = Math.max(...supportedRates)
     return {
       backend: this.id,
-      label: 'YouTube IFrame',
+      label: maximum > 2 ? 'YouTube IFrame · Extended rate verified' : 'YouTube IFrame',
       provider: 'youtube',
       supportedRates,
-      maxContinuousRate: Math.max(...supportedRates),
+      maxContinuousRate: maximum,
       canSeek: true,
       canControlVolume: true,
       rateMode: 'iframe-rate',
@@ -156,13 +211,15 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
     if (request.media.provider !== 'youtube') throw new Error('YouTubeIFrameBackend requires a YouTube media source')
     this.requestedStart = request.startSeconds
     this.requestedRate = request.desiredRate
+    const generation = ++this.generation
 
     if (this.player && this.host === request.host) {
+      window.clearInterval(this.timer)
+      this.timer = undefined
       this.player.cueVideoById(request.media.id, request.startSeconds)
-      this.emit({ state: 'cued', position: request.startSeconds, error: undefined })
-      this.refreshCapabilities()
-      this.setRate(resolveSupportedRate(this.requestedRate, this.snapshot.supportedRates))
-      this.startPolling()
+      this.emit({ ready: false, state: 'cued', position: request.startSeconds, duration: 0, actualRate: 1, supportedRates: [1], error: undefined })
+      await this.waitForCuedVideo(generation)
+      await this.prepareReadyPlayer(generation)
       return
     }
 
@@ -172,6 +229,7 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
 
     try {
       const YT = await loadYouTubeApi()
+      if (generation !== this.generation) return
       this.player = new YT.Player(request.host, {
         videoId: request.media.id,
         width: '100%',
@@ -188,38 +246,60 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
           start: Math.floor(request.startSeconds),
         },
         events: {
-          onReady: () => this.handleReady(),
+          onReady: () => { void this.prepareReadyPlayer(generation) },
           onStateChange: (event: { data: YTPlayerState }) => this.emit({ state: stateName(event.data) }),
-          onPlaybackRateChange: () => this.poll(),
+          onPlaybackRateChange: () => { if (!this.probingRates) this.poll() },
           onError: (event: { data: number }) => {
             recordDiagnostic('player', `YouTube Player error ${event.data}`)
             this.emit({ state: 'error', error: `YouTube Player error ${event.data}` })
           },
         },
       })
-      this.startPolling()
     } catch (error) {
       recordDiagnostic('player', 'Embedded Player initialization failed')
       this.emit({ state: 'error', error: error instanceof Error ? error.message : 'Player unavailable' })
     }
   }
 
-  private handleReady(): void {
-    this.refreshCapabilities()
-    const actualRate = resolveSupportedRate(this.requestedRate, this.snapshot.supportedRates)
-    this.player?.setPlaybackRate(actualRate)
-    if (this.requestedStart > 0) this.player?.seekTo(this.requestedStart, true)
-    this.emit({
-      ready: true,
-      state: 'cued',
-      duration: this.player?.getDuration() ?? 0,
-      actualRate,
-    })
+  private async waitForCuedVideo(generation: number): Promise<void> {
+    const player = this.player
+    if (!player) return
+    for (let attempt = 0; attempt < VIDEO_CUE_ATTEMPTS; attempt += 1) {
+      if (generation !== this.generation || player !== this.player) return
+      if (player.getPlayerState() === 5 || player.getDuration() > 0) return
+      await wait(VIDEO_CUE_SETTLE_MS)
+    }
   }
 
-  private refreshCapabilities(): void {
-    const rates = this.player?.getAvailablePlaybackRates() ?? [1]
-    this.emit({ supportedRates: rates.length ? [...rates] : [1] })
+  private async prepareReadyPlayer(generation: number): Promise<void> {
+    const player = this.player
+    if (!player || generation !== this.generation) return
+
+    let supportedRates = normalizeRates(player.getAvailablePlaybackRates())
+    if (player.getPlayerState() !== 1) {
+      this.probingRates = true
+      try {
+        supportedRates = await probeYouTubePlaybackRates(player, supportedRates)
+      } catch {
+        recordDiagnostic('player', 'YouTube extended playback-rate probe failed')
+      } finally {
+        this.probingRates = false
+      }
+    }
+    if (player !== this.player || generation !== this.generation) return
+
+    const targetRate = resolveSupportedRate(this.requestedRate, supportedRates)
+    player.setPlaybackRate(targetRate)
+    if (this.requestedStart > 0) player.seekTo(this.requestedStart, true)
+    this.emit({
+      ready: true,
+      state: stateName(player.getPlayerState()),
+      duration: player.getDuration(),
+      position: player.getCurrentTime(),
+      actualRate: player.getPlaybackRate(),
+      supportedRates: supportedRates.length ? supportedRates : [1],
+    })
+    this.startPolling()
   }
 
   private startPolling(): void {
@@ -228,7 +308,7 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
   }
 
   private poll(): void {
-    if (!this.player) return
+    if (!this.player || this.probingRates) return
     try {
       const now = performance.now()
       const actualVolume = this.player.getVolume()
@@ -239,14 +319,18 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
       const muted = this.optimisticMuted && this.optimisticMuted.until > now ? this.optimisticMuted.value : actualMuted
       if (this.optimisticVolume && this.optimisticVolume.until <= now) this.optimisticVolume = undefined
       if (this.optimisticMuted && this.optimisticMuted.until <= now) this.optimisticMuted = undefined
-      const rates = this.player.getAvailablePlaybackRates()
+      const advertisedRates = this.player.getAvailablePlaybackRates()
+      const actualRate = this.player.getPlaybackRate()
+      const supportedRates = new Set(this.snapshot.supportedRates)
+      for (const rate of advertisedRates) supportedRates.add(rate)
+      if (VISTAPLAY_STANDARD_RATES.includes(actualRate as (typeof VISTAPLAY_STANDARD_RATES)[number])) supportedRates.add(actualRate)
       this.emit({
         position: this.player.getCurrentTime(),
         duration: this.player.getDuration(),
-        actualRate: this.player.getPlaybackRate(),
+        actualRate,
         muted,
         volume,
-        supportedRates: rates.length ? [...rates] : [1],
+        supportedRates: normalizeRates([...supportedRates]),
       })
     } catch { /* Player may be transitioning. */ }
   }
@@ -292,6 +376,7 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
   }
 
   destroy(): void {
+    this.generation += 1
     this.releasePlayer()
     this.emit({ ready: false, state: 'idle', position: 0, duration: 0, actualRate: 1, supportedRates: [1] })
   }
@@ -299,6 +384,7 @@ export class YouTubeIFrameBackend implements PlaybackBackend {
   private releasePlayer(): void {
     window.clearInterval(this.timer)
     this.timer = undefined
+    this.probingRates = false
     this.player?.destroy()
     this.player = undefined
     this.host = undefined
