@@ -1,7 +1,7 @@
 import { AndroidExtendedBackend, hasAndroidPlaybackBridge } from './backends/AndroidExtendedBackend'
 import { WebMediaBackend } from './backends/WebMediaBackend'
 import { YouTubeIFrameBackend } from './backends/YouTubeIFrameBackend'
-import { isVistaPlayRate, resolveSupportedRate } from './playbackRates'
+import { isVistaPlayRate } from './playbackRates'
 import type { PlaybackBackend, PlaybackBackendSnapshot, PlaybackCapabilities, PlaybackMedia, PlaybackSnapshot } from './types'
 
 const EMPTY_CAPABILITIES: PlaybackCapabilities = {
@@ -131,9 +131,8 @@ export class PlaybackOrchestrator extends EventTarget {
   private applyEffectiveRate(): void {
     if (!this.backend) return
     const requested = this.transientRate ?? this.snapshotValue.desiredRate
-    const target = resolveSupportedRate(requested, this.snapshotValue.supportedRates)
-    if (Math.abs(this.snapshotValue.actualRate - target) < 0.001) return
-    this.requestRate(target)
+    if (Math.abs(this.snapshotValue.actualRate - requested) < 0.001) return
+    this.requestRate(requested)
   }
 
   private requestRate(rate: number): void {
