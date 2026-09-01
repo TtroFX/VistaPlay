@@ -35,3 +35,21 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Browser smoke
         run: npx playwright test --config=e2e/playwright.config.mjs
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 37
+        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+      - name: Assemble Android debug app
+        run: gradle -p android :app:assembleDebug --stacktrace
