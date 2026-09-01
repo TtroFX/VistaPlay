@@ -29,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('RelayResolver', () => {
   it('resolves sanitized proxied media through the relay endpoint', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify(relayPayload()), {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(JSON.stringify(relayPayload()), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     }))
