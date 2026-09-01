@@ -7,6 +7,36 @@ const VIDEO_B = 'M7lc1UVf-VE'
 const TEST_MEDIA = readFileSync(fileURLToPath(new URL('./fixtures/playback-smoke.webm', import.meta.url)))
 
 async function installYouTubeStub(page) {
+  await page.route('https://vistaplay-relay-ibukioike2009-7645s-projects.vercel.app/api/resolve**', async (route) => {
+    const requestUrl = new URL(route.request().url())
+    const videoId = requestUrl.searchParams.get('videoId') ?? VIDEO_A
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        provider: 'youtube',
+        videoId,
+        duration: 2,
+        resolvedAt: Date.now(),
+        resolver: { type: 'invidious', instance: 'https://inv.nadeko.net' },
+        streams: [{
+          url: `https://inv.nadeko.net/videoplayback?local=true&id=${encodeURIComponent(videoId)}`,
+          mimeType: 'video/webm; codecs="vp8, opus"',
+          container: 'webm',
+          width: 320,
+          height: 180,
+          bitrate: 80_000,
+          videoCodec: 'vp8',
+          videoOnly: false,
+          audioOnly: false,
+          qualityLabel: '180p',
+          proxied: true,
+        }],
+      }),
+    })
+  })
+
   await page.route('https://raw.githubusercontent.com/iv-org/documentation/master/docs/instances.md', async (route) => {
     await route.fulfill({
       status: 200,
