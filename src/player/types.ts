@@ -1,7 +1,7 @@
-export type PlaybackBackendId = 'none' | 'youtube-iframe' | 'android-extended' | 'web-media'
+export type PlaybackBackendId = 'none' | 'web-media'
 export type PlaybackProvider = 'youtube' | 'web' | 'local'
 export type PlaybackStateName = 'idle' | 'cued' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error'
-export type PlaybackRateMode = 'native-rate' | 'iframe-rate' | 'unavailable'
+export type PlaybackRateMode = 'native-rate' | 'unavailable'
 
 export interface PlaybackCapabilities {
   backend: PlaybackBackendId
@@ -26,9 +26,7 @@ export interface PlaybackBackendSnapshot {
   error?: string
 }
 
-export type PlaybackMedia =
-  | { provider: 'youtube'; id: string }
-  | { provider: 'web' | 'local'; element: HTMLMediaElement }
+export type PlaybackMedia = { provider: 'web' | 'local'; element: HTMLMediaElement }
 
 export interface PlaybackMountRequest {
   host: HTMLElement

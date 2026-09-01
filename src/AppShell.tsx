@@ -5,11 +5,7 @@ import { NativeControlLayer } from './components/NativeControlLayer'
 import { Sidebar } from './components/Sidebar'
 import { ToastViewport } from './components/ToastViewport'
 import { TopBar } from './components/TopBar'
-import { recordDiagnostic } from './lib/diagnostics'
-import { toggleFullscreen } from './lib/fullscreen'
 import { useEdgeSwipeBack } from './lib/useEdgeSwipeBack'
-import { PersistentPlayer } from './player/PersistentPlayer'
-import { playerEngine } from './player/PlayerEngine'
 import { useApp } from './store/AppStore'
 
 export function AppShell() {
@@ -20,7 +16,6 @@ export function AppShell() {
   const swipeBack = useCallback(() => navigate(-1), [navigate])
   const swipeRef = useEdgeSwipeBack(swipeBack)
   const previousPathname = useRef(location.pathname)
-  const supportedRateKey = app.player.supportedRates.join(',')
 
   useEffect(() => {
     const previous = window.history.scrollRestoration
@@ -53,37 +48,6 @@ export function AppShell() {
     }
   }, [app.state.settings.theme])
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target?.matches('input, textarea, select, button, a, [role="button"], [contenteditable="true"]')) return
-      if (event.code === 'Space' || event.key.toLowerCase() === 'k') { event.preventDefault(); playerEngine.toggle() }
-      else if (event.key.toLowerCase() === 'j') playerEngine.seekBy(-10)
-      else if (event.key.toLowerCase() === 'l') playerEngine.seekBy(10)
-      else if (event.key === 'ArrowLeft') playerEngine.seekBy(-5)
-      else if (event.key === 'ArrowRight') playerEngine.seekBy(5)
-      else if (event.key.toLowerCase() === 'm') playerEngine.toggleMute()
-      else if (event.key.toLowerCase() === 'f') {
-        const frame = document.querySelector<HTMLElement>('.player-frame')
-        void toggleFullscreen(frame).then((result) => {
-          if (result === 'unavailable') app.notify('このブラウザではFullscreenを利用できません', 'error')
-        }).catch(() => { recordDiagnostic('player', 'Fullscreen request failed'); app.notify('Fullscreenへ切り替えられませんでした', 'error') })
-      }
-      else if (event.shiftKey && event.key === ',') {
-        const rates = app.player.supportedRates
-        const index = rates.indexOf(app.player.actualRate)
-        playerEngine.setDesiredRate(rates[Math.max(0, index - 1)] ?? app.player.actualRate)
-      }
-      else if (event.shiftKey && event.key === '.') {
-        const rates = app.player.supportedRates
-        const index = rates.indexOf(app.player.actualRate)
-        playerEngine.setDesiredRate(rates[Math.min(rates.length - 1, index + 1)] ?? app.player.actualRate)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [app.player.actualRate, supportedRateKey])
-
   if (!app.hydrated) {
     return <div className="app-boot" role="status" aria-live="polite">
       <span className="brand-mark" aria-hidden="true">V</span>
@@ -99,12 +63,11 @@ export function AppShell() {
   const cinemaMode = fullPlayer && app.state.settings.layout.cinemaMode
   const configuredSidebar = app.state.settings.layout.sidebarMode
   const effectiveSidebar = (focusMode || cinemaMode) && configuredSidebar === 'expanded' ? 'compact' : configuredSidebar
-  return <div className={`app-shell sidebar-${effectiveSidebar} cards-${app.state.settings.layout.cardSize} ${app.currentVideo && !fullPlayer ? 'has-mini-player' : ''} ${focusMode ? 'focus-mode' : ''} ${cinemaMode ? 'cinema-mode' : ''}`}>
+  return <div className={`app-shell sidebar-${effectiveSidebar} cards-${app.state.settings.layout.cardSize} ${focusMode ? 'focus-mode' : ''} ${cinemaMode ? 'cinema-mode' : ''}`}>
     <Sidebar />
     <div className="app-column">
       {!focusMode && <TopBar />}
       <main ref={swipeRef} className={`main-content ${fullPlayer ? 'watch-stage' : ''}`}>
-        <PersistentPlayer />
         <Suspense fallback={<LoadingCards />}><Outlet /></Suspense>
       </main>
     </div>

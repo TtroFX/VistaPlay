@@ -1,12 +1,10 @@
-import { AndroidExtendedBackend, hasAndroidPlaybackBridge } from './backends/AndroidExtendedBackend'
 import { WebMediaBackend } from './backends/WebMediaBackend'
-import { YouTubeIFrameBackend } from './backends/YouTubeIFrameBackend'
 import { isVistaPlayRate } from './playbackRates'
 import type { PlaybackBackend, PlaybackBackendSnapshot, PlaybackCapabilities, PlaybackMedia, PlaybackSnapshot } from './types'
 
 const EMPTY_CAPABILITIES: PlaybackCapabilities = {
   backend: 'none',
-  label: 'Playback unavailable',
+  label: 'Playback route not connected',
   provider: 'none',
   supportedRates: [1],
   maxContinuousRate: 1,
@@ -46,8 +44,6 @@ export class PlaybackOrchestrator extends EventTarget {
     const backend = this.backend
     if (!backend) return
     const capabilities = backend.getCapabilities()
-    const previousRates = this.snapshotValue.supportedRates.join(',')
-    const nextRates = capabilities.supportedRates.join(',')
     if (this.lastRequestedRate !== undefined && Math.abs(backendSnapshot.actualRate - this.lastRequestedRate) < 0.001) this.lastRequestedRate = undefined
     this.emit({
       ...backendSnapshot,
@@ -55,21 +51,6 @@ export class PlaybackOrchestrator extends EventTarget {
       supportedRates: [...capabilities.supportedRates],
       capabilities,
     })
-    if (previousRates !== nextRates || this.lastRequestedRate === undefined) this.applyEffectiveRate()
-  }
-
-  async mountYoutube(host: HTMLElement, videoId: string, startSeconds = 0, desiredRate = 1): Promise<void> {
-    this.transientRate = undefined
-    this.lastRequestedRate = undefined
-    if (isVistaPlayRate(desiredRate)) this.emit({ desiredRate })
-    const backendId = hasAndroidPlaybackBridge() ? 'android-extended' : 'youtube-iframe'
-    if (!this.backend || this.backend.id !== backendId) this.installBackend(backendId === 'android-extended' ? new AndroidExtendedBackend() : new YouTubeIFrameBackend())
-    const backend = this.backend
-    if (!backend) return
-    await backend.mount({ host, media: { provider: 'youtube', id: videoId }, startSeconds, desiredRate: this.snapshotValue.desiredRate })
-    if (this.backend !== backend) return
-    this.handleBackendSnapshot(backend.snapshot)
-    this.applyEffectiveRate()
   }
 
   async mountMedia(host: HTMLElement, media: Extract<PlaybackMedia, { provider: 'web' | 'local' }>, startSeconds = 0, desiredRate = 1): Promise<void> {
@@ -167,7 +148,18 @@ export class PlaybackOrchestrator extends EventTarget {
     this.backend = undefined
     this.transientRate = undefined
     this.lastRequestedRate = undefined
-    this.snapshotValue = { ...this.snapshotValue, backend: 'none', ready: false, state: 'idle', position: 0, duration: 0, actualRate: 1, supportedRates: [1], capabilities: EMPTY_CAPABILITIES }
+    this.snapshotValue = {
+      ...this.snapshotValue,
+      backend: 'none',
+      ready: false,
+      state: 'idle',
+      position: 0,
+      duration: 0,
+      actualRate: 1,
+      supportedRates: [1],
+      capabilities: EMPTY_CAPABILITIES,
+      error: undefined,
+    }
     this.dispatchEvent(new CustomEvent<PlaybackSnapshot>('change', { detail: this.snapshotValue }))
   }
 }
