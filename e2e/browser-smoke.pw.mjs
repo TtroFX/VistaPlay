@@ -4,44 +4,86 @@ const VIDEO_A = 'dQw4w9WgXcQ'
 const VIDEO_B = 'M7lc1UVf-VE'
 
 async function installYouTubeStub(page) {
+  await page.route('https://raw.githubusercontent.com/iv-org/documentation/master/docs/instances.md', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/plain',
+      body: '* [Smoke Invidious](https://inv.nadeko.net)\n',
+    })
+  })
+
+  await page.route(/https:\/\/(?:inv\.nadeko\.net|invidious\.nerdvpn\.de|yt\.chocolatemoo53\.com|invidious\.tiekoetter\.com)\/api\/v1\/videos\/.*/, async (route) => {
+    const requestUrl = new URL(route.request().url())
+    const videoId = decodeURIComponent(requestUrl.pathname.split('/').pop() ?? VIDEO_A)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        lengthSeconds: 600,
+        formatStreams: [{
+          url: `https://inv.nadeko.net/videoplayback?local=true&id=${encodeURIComponent(videoId)}`,
+          type: 'video/mp4; codecs="avc1.64001F, mp4a.40.2"',
+          quality: 'hd720',
+          qualityLabel: '720p',
+          resolution: '1280x720',
+          container: 'mp4',
+          bitrate: 1_500_000,
+          encoding: 'h264',
+        }],
+      }),
+    })
+  })
+
   await page.addInitScript(() => {
     const calls = []
     Object.defineProperty(window, '__vistaplayYtCalls', { value: calls, configurable: true })
-    class StubPlayer {
-      constructor(_element, options) {
-        this.options = options
-        this.videoId = options.videoId
-        this.position = Number(options.playerVars?.start ?? 0)
-        this.duration = 600
-        this.rate = 1
-        this.volume = 100
-        this.muted = false
-        this.state = 5
-        queueMicrotask(() => options.events?.onReady?.({ target: this }))
+    const nativeCreateElement = Document.prototype.createElement
+    Document.prototype.createElement = function createElement(name, options) {
+      const element = nativeCreateElement.call(this, name, options)
+      if (String(name).toLowerCase() !== 'video') return element
+
+      let paused = true
+      let currentTime = 0
+      Object.defineProperties(element, {
+        readyState: { configurable: true, get: () => HTMLMediaElement.HAVE_ENOUGH_DATA },
+        duration: { configurable: true, get: () => 600 },
+        paused: { configurable: true, get: () => paused },
+        currentTime: {
+          configurable: true,
+          get: () => currentTime,
+          set: (value) => {
+            currentTime = Number.isFinite(Number(value)) ? Number(value) : 0
+            element.dispatchEvent(new Event('timeupdate'))
+          },
+        },
+        buffered: {
+          configurable: true,
+          get: () => ({ length: 1, start: () => 0, end: () => 600 }),
+        },
+      })
+      element.load = () => {
+        queueMicrotask(() => {
+          element.dispatchEvent(new Event('loadstart'))
+          element.dispatchEvent(new Event('loadedmetadata'))
+          element.dispatchEvent(new Event('durationchange'))
+          element.dispatchEvent(new Event('canplay'))
+          element.dispatchEvent(new Event('progress'))
+        })
       }
-      emit(data) { this.options.events?.onStateChange?.({ data }) }
-      cueVideoById(id, start = 0) { this.videoId = id; this.position = start; this.state = 5; calls.push(['cue', id]); this.emit(5) }
-      loadVideoById(id, start = 0) { this.videoId = id; this.position = start; this.state = 1; calls.push(['load', id]); this.emit(1) }
-      playVideo() { this.state = 1; calls.push(['play', this.videoId]); this.emit(1) }
-      pauseVideo() { this.state = 2; calls.push(['pause', this.videoId]); this.emit(2) }
-      stopVideo() { this.state = -1; calls.push(['stop', this.videoId]) }
-      seekTo(seconds) { this.position = seconds; calls.push(['seek', seconds]) }
-      getCurrentTime() { return this.position }
-      getDuration() { return this.duration }
-      getPlayerState() { return this.state }
-      getPlaybackRate() { return this.rate }
-      setPlaybackRate(rate) { this.rate = rate; this.options.events?.onPlaybackRateChange?.({ data: rate }) }
-      getAvailablePlaybackRates() { return [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] }
-      isMuted() { return this.muted }
-      mute() { this.muted = true }
-      unMute() { this.muted = false }
-      getVolume() { return this.volume }
-      setVolume(value) { this.volume = value }
-      destroy() { calls.push(['destroy', this.videoId]) }
-    }
-    window.YT = {
-      Player: StubPlayer,
-      PlayerState: { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 },
+      element.play = () => {
+        paused = false
+        calls.push(['play', element.src])
+        element.dispatchEvent(new Event('play'))
+        element.dispatchEvent(new Event('playing'))
+        return Promise.resolve()
+      }
+      element.pause = () => {
+        paused = true
+        calls.push(['pause', element.src])
+        element.dispatchEvent(new Event('pause'))
+      }
+      return element
     }
   })
 }
@@ -86,7 +128,7 @@ async function expectNoHorizontalOverflow(page) {
   expect(overflow).toBeLessThanOrEqual(1)
 }
 
-test('tablet shell, direct Watch, persistent mini player, queue and IndexedDB persistence', async ({ page }) => {
+test('tablet shell, resolver-backed 4x player, persistent mini player, queue and IndexedDB persistence', async ({ page }) => {
   await installYouTubeStub(page)
   const blockingErrors = watchBlockingErrors(page)
 
@@ -101,7 +143,11 @@ test('tablet shell, direct Watch, persistent mini player, queue and IndexedDB pe
 
   await page.goto(`/watch?v=${VIDEO_A}`)
   await expect(page.locator('.persistent-player.player-full')).toBeVisible()
-  await expect(page.getByRole('button', { name: '再生' })).toBeVisible()
+  await expect(page.locator('.vistaplay-media')).toBeVisible()
+  await expect(page.getByRole('button', { name: '再生' })).toBeEnabled()
+  await page.getByLabel('再生速度').selectOption('4')
+  await expect.poll(() => page.locator('.vistaplay-media').evaluate((element) => element.playbackRate)).toBe(4)
+  await expect(page.locator('.player-source-label')).toContainText('実再生 4x')
   expect(await page.evaluate(() => window.__vistaplayYtCalls.filter(([kind]) => kind === 'play').length)).toBe(0)
 
   await page.getByRole('button', { name: 'お気に入り' }).click()
