@@ -1,9 +1,7 @@
-node_modules
-dist
-coverage
-.env
-.env.local
-.vercel
-.superdesign/tmp
-*.tsbuildinfo
-npm-debug.log*
+node_modules/
+dist/
+.vite/
+coverage/
+*.local
+relay-cloudflare/.wrangler/
+relay-cloudflare/.wrangler-dist/
