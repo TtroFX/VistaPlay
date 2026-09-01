@@ -1,6 +1,6 @@
 import { Bot, Filter, ListPlus, Play, Search, SlidersHorizontal, UserRound, X } from 'lucide-react'
-import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
+import { FormEvent, useEffect, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { EmptyState, LoadingCards } from '../components/EmptyState'
 import { VideoCard } from '../components/VideoCard'
 import type { SearchFilters, SearchResult } from '../domain/types'
@@ -16,8 +16,6 @@ type RestoredSearch = { query: string; filters: SearchFilters; results: SearchRe
 
 export default function SearchPage() {
   const app = useApp()
-  const location = useLocation()
-  const navigationType = useNavigationType()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [smartSearch] = useState<SmartSearchImport | null>(() => {
@@ -30,9 +28,7 @@ export default function SearchPage() {
   const restored = useRef<RestoredSearch | null>(null)
   if (!restored.current) { try { restored.current = JSON.parse(sessionStorage.getItem(RESTORE_KEY) ?? 'null') } catch { restored.current = null } }
   const requestedQuery = params.get('q')
-  const isHistoryReturn = navigationType === 'POP' && location.key !== 'default'
   const canRestoreState = !smartSearch && Boolean(restored.current) && (!requestedQuery || requestedQuery === restored.current?.query)
-  const shouldRestoreScroll = canRestoreState && isHistoryReturn
   const [query, setQuery] = useState(smartSearch?.searches[0].query ?? requestedQuery ?? (canRestoreState ? restored.current?.query : '') ?? '')
   const [filters, setFilters] = useState<SearchFilters>(canRestoreState ? restored.current?.filters ?? defaults : defaults)
   const [results, setResults] = useState<SearchResult[]>(canRestoreState ? restored.current?.results ?? [] : [])
@@ -45,28 +41,11 @@ export default function SearchPage() {
   const searchRequest = useRef<AbortController | undefined>(undefined)
   const searchGeneration = useRef(0)
   const dismissFilters = useTemporaryHistory(showFilters, () => setShowFilters(false), 'search-filters')
-  const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: shouldRestoreScroll ? restored.current?.scroll ?? 0 : 0 })
-  latest.current = { query, filters, results, next, sort, scroll: latest.current.scroll }
+  const latest = useRef<RestoredSearch>({ query, filters, results, next, sort, scroll: 0 })
+  latest.current = { query, filters, results, next, sort, scroll: 0 }
 
-  useLayoutEffect(() => {
-    if (!shouldRestoreScroll) return
-    const top = restored.current?.scroll ?? 0
-    const root = document.documentElement
-    const priorBehavior = root.style.scrollBehavior
-    root.style.scrollBehavior = 'auto'
-    window.scrollTo(0, top)
-    root.scrollTop = top
-    document.body.scrollTop = top
-    root.style.scrollBehavior = priorBehavior
-  }, [])
-
-  useEffect(() => {
-    const trackScroll = () => { latest.current.scroll = window.scrollY }
-    window.addEventListener('scroll', trackScroll, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', trackScroll)
-      sessionStorage.setItem(RESTORE_KEY, JSON.stringify(latest.current))
-    }
+  useEffect(() => () => {
+    sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: 0 }))
   }, [])
   useEffect(() => { if (smartSearch) void runSmartSearch(smartSearch); else if (params.get('q') && !results.length) void runSearch(false) }, [])
   useEffect(() => {
@@ -129,7 +108,7 @@ export default function SearchPage() {
     const parsed = parseYouTubeInput(searchQuery)
     if (parsed) {
       searchRequest.current?.abort()
-      sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: window.scrollY }))
+      sessionStorage.setItem(RESTORE_KEY, JSON.stringify({ ...latest.current, scroll: 0 }))
       navigate(parsed.type === 'video' ? `/watch?v=${parsed.id}` : parsed.type === 'channel' ? `/channel/${parsed.id}` : `/playlist/${parsed.id}`)
       return
     }
