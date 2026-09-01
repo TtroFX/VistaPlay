@@ -29,17 +29,21 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('RelayResolver', () => {
   it('resolves sanitized proxied media through the relay endpoint', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => new Response(JSON.stringify(relayPayload()), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }))
+    const requested: string[] = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      requested.push(String(input))
+      return new Response(JSON.stringify(relayPayload()), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    })
     vi.stubGlobal('fetch', fetchMock)
 
     const resolver = new RelayResolver('https://relay.example')
     const media = await resolver.resolve(VIDEO_ID)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(String(fetchMock.mock.calls[0][0])).toBe(`https://relay.example/api/resolve?videoId=${VIDEO_ID}`)
+    expect(requested).toEqual([`https://relay.example/api/resolve?videoId=${VIDEO_ID}`])
     expect(media.resolver).toEqual({ type: 'invidious', instance: 'https://inv.nadeko.net' })
     expect(media.streams[0]).toMatchObject({ proxied: true, height: 360, videoOnly: false, audioOnly: false })
   })
