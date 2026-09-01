@@ -1,11 +1,13 @@
 import { MediaResolverError, type MediaResolver } from '../MediaResolver'
 import type { ResolvedMedia } from '../types'
+import { normalizeInvidiousResponse } from './InvidiousResolver'
 import { normalizePipedResponse } from './PipedResolver'
 
 interface NativeResolveResponse {
   type?: unknown
   requestId?: unknown
   ok?: unknown
+  resolverType?: unknown
   instance?: unknown
   payload?: unknown
   error?: unknown
@@ -20,7 +22,7 @@ interface PendingRequest {
 }
 
 export class NativePipedResolver implements MediaResolver {
-  readonly id = 'native-piped'
+  readonly id = 'native-media'
   private readonly pending = new Map<string, PendingRequest>()
 
   constructor(private readonly bridge: VistaPlayNativeBridge | undefined = getNativeBridge()) {
@@ -39,7 +41,14 @@ export class NativePipedResolver implements MediaResolver {
     if (response.ok !== true) {
       throw new MediaResolverError('RESOLVE_FAILED', typeof response.error === 'string' ? response.error : 'Native resolver failed')
     }
-    if (typeof response.instance !== 'string') throw new MediaResolverError('INVALID_RESPONSE', 'Native resolver omitted its Piped instance')
+    if (typeof response.instance !== 'string') throw new MediaResolverError('INVALID_RESPONSE', 'Native resolver omitted its instance')
+
+    if (response.resolverType === 'invidious') {
+      return normalizeInvidiousResponse(videoId, response.instance, response.payload)
+    }
+    if (response.resolverType !== undefined && response.resolverType !== 'piped') {
+      throw new MediaResolverError('INVALID_RESPONSE', `Native resolver returned unsupported type: ${String(response.resolverType)}`)
+    }
     return normalizePipedResponse(videoId, response.instance, response.payload)
   }
 
@@ -54,7 +63,7 @@ export class NativePipedResolver implements MediaResolver {
         if (pending?.signal && pending.abort) pending.signal.removeEventListener('abort', pending.abort)
         this.pending.delete(requestId)
         reject(new MediaResolverError('RESOLVER_TIMEOUT', 'Native resolver timed out'))
-      }, 45_000)
+      }, 55_000)
       const abort = signal ? () => {
         clearTimeout(timeoutId)
         this.pending.delete(requestId)

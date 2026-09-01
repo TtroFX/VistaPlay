@@ -165,6 +165,7 @@ async function fillVideoId(cdp, videoId) {
 async function diagnosticsState(cdp) {
   return cdp.evaluate(`(() => ({
     phase: document.querySelector('[data-testid="diag-phase"]')?.textContent ?? '',
+    message: document.querySelector('[data-testid="diag-message"]')?.textContent ?? '',
     resolver: document.querySelector('[data-testid="diag-resolver"]')?.textContent ?? '',
     stream: document.querySelector('[data-testid="diag-stream"]')?.textContent ?? '',
     ready: document.querySelector('[data-testid="diag-ready"]')?.textContent ?? '',
@@ -196,7 +197,7 @@ async function main() {
       await fillVideoId(cdp, videoId)
       await clickByText(cdp, 'Resolve & Mount')
       await sleep(300)
-      await cdp.waitFor(`['mounted', 'error'].includes(document.querySelector('[data-testid="diag-phase"]')?.textContent ?? '')`, 60_000)
+      await cdp.waitFor(`['mounted', 'error'].includes(document.querySelector('[data-testid="diag-phase"]')?.textContent ?? '')`, 75_000)
       const state = await diagnosticsState(cdp)
       console.log(`attempt ${videoId}: ${JSON.stringify(state)}`)
       attempts.push({ videoId, ...state })
@@ -213,7 +214,7 @@ async function main() {
     }
 
     assert(mountedState, `Native resolver produced no playable media: ${JSON.stringify(attempts)}`)
-    assert(mountedState.resolver.includes('piped'), `Unexpected resolver: ${mountedState.resolver}`)
+    assert(/piped|invidious/.test(mountedState.resolver), `Unexpected resolver: ${mountedState.resolver}`)
     assert(mountedState.stream.includes('proxied'), `Expected proxied muxed stream, got: ${mountedState.stream}`)
 
     await clickByText(cdp, '4x')

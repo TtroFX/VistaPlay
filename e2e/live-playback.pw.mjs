@@ -20,7 +20,7 @@ test('public resolver delivers a real YouTube stream to VistaPlay-owned video at
     await page.getByLabel('Diagnostics Video ID').fill(videoId)
     await page.getByRole('button', { name: 'Resolve & Mount' }).click()
     try {
-      await expect(page.getByTestId('diag-phase')).toHaveText('mounted', { timeout: 55_000 })
+      await expect(page.getByTestId('diag-phase')).toHaveText('mounted', { timeout: 70_000 })
       await expect(page.getByTestId('diag-ready')).toHaveText('true', { timeout: 20_000 })
       mounted = true
       break
@@ -28,6 +28,7 @@ test('public resolver delivers a real YouTube stream to VistaPlay-owned video at
       attempts.push({
         videoId,
         phase: await page.getByTestId('diag-phase').textContent(),
+        message: await page.getByTestId('diag-message').textContent(),
         resolver: await page.getByTestId('diag-resolver').textContent(),
         stream: await page.getByTestId('diag-stream').textContent(),
         error: await page.getByTestId('diag-error').textContent(),
@@ -39,7 +40,7 @@ test('public resolver delivers a real YouTube stream to VistaPlay-owned video at
 
   const media = page.locator('.vistaplay-media')
   await expect(media).toBeVisible()
-  await expect(page.getByTestId('diag-resolver')).toContainText('piped')
+  await expect(page.getByTestId('diag-resolver')).toContainText(/piped|invidious/)
   await expect(page.getByTestId('diag-stream')).toContainText('proxied')
 
   await page.getByRole('button', { name: '4x', exact: true }).click()

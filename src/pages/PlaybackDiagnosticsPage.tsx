@@ -116,7 +116,7 @@ export default function PlaybackDiagnosticsPage() {
       <h2 style={{ marginTop: 0 }}>Result</h2>
       <dl style={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: '8px 18px', margin: 0 }}>
         <dt>Phase</dt><dd data-testid="diag-phase">{phase}</dd>
-        <dt>Message</dt><dd>{message}</dd>
+        <dt>Message</dt><dd data-testid="diag-message">{message}</dd>
         <dt>Resolver</dt><dd data-testid="diag-resolver">{resolver}</dd>
         <dt>Stream</dt><dd data-testid="diag-stream" style={{ overflowWrap: 'anywhere' }}>{stream}</dd>
         <dt>Backend</dt><dd>html-media</dd>
