@@ -4,10 +4,12 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import type { WatchSession } from '../domain/types'
 import { recordDiagnostic } from '../lib/diagnostics'
 import { toggleFullscreen } from '../lib/fullscreen'
-import { nextPlaybackRate, resolvePlaybackEndAction, resolvePlaybackRate } from '../lib/playerMath'
+import { resolvePlaybackEndAction } from '../lib/playerMath'
 import { formatDuration } from '../lib/time'
 import { useApp } from '../store/AppStore'
-import { playerEngine } from './PlayerEngine'
+import { playbackOrchestrator } from './PlaybackOrchestrator'
+import { nextSupportedRate } from './playbackRates'
+import { PlaybackRateControl } from './ui/PlaybackRateControl'
 
 interface ActiveSession {
   id: string
@@ -36,7 +38,7 @@ export function PersistentPlayer() {
   const [b, setB] = useState<number>()
   const [boosting, setBoosting] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
-  const boostRate = useRef<number | undefined>(undefined)
+  const boostActualRate = useRef<number | undefined>(undefined)
   const lastProgress = useRef(performance.now())
   const session = useRef<ActiveSession | undefined>(undefined)
   const full = location.pathname === '/watch'
@@ -50,14 +52,21 @@ export function PersistentPlayer() {
       ?? app.state.channelPreferences.find((item) => item.channelId === current.channelId)?.playbackRate
       ?? app.state.settings.playback.globalRate
   }, [app.state.channelPreferences, app.state.settings.playback.globalRate, app.state.videoPreferences, current])
-  const availableRateKey = app.player.availableRates.join(',')
 
   useEffect(() => {
     if (!hostRef.current || !current) return
     const position = app.state.lastPlayer?.videoId === current.videoId ? app.state.lastPlayer.position : app.state.history[current.videoId]?.position ?? 0
-    void playerEngine.mount(hostRef.current, current.videoId, position, preferredRate)
-    boostRate.current = undefined; setBoosting(false); setA(undefined); setB(undefined); setRepeat(false)
+    void playbackOrchestrator.mountYoutube(hostRef.current, current.videoId, position, preferredRate)
+    boostActualRate.current = undefined
+    setBoosting(false)
+    setA(undefined)
+    setB(undefined)
+    setRepeat(false)
   }, [current?.videoId])
+
+  useEffect(() => {
+    if (current) playbackOrchestrator.setDesiredRate(preferredRate)
+  }, [current?.videoId, preferredRate])
 
   useEffect(() => {
     const update = () => setFullscreen(document.fullscreenElement === frameRef.current)
@@ -73,26 +82,29 @@ export function PersistentPlayer() {
     return () => {
       window.removeEventListener('blur', releaseBoost)
       document.removeEventListener('visibilitychange', releaseHiddenBoost)
-      if (boostRate.current !== undefined) playerEngine.setRate(boostRate.current)
-      boostRate.current = undefined
+      if (boostActualRate.current !== undefined) playbackOrchestrator.clearTemporaryRate(boostActualRate.current)
+      boostActualRate.current = undefined
     }
   }, [])
-
-  useEffect(() => {
-    if (!current || !app.player.ready) return
-    const resolved = resolvePlaybackRate(preferredRate, app.player.availableRates)
-    if (resolved !== app.player.rate) playerEngine.setRate(resolved)
-  }, [current?.videoId, preferredRate, app.player.ready, availableRateKey])
 
   useEffect(() => {
     const active = session.current
     if (active && active.videoId !== current?.videoId) finishSession()
     if (app.player.state === 'playing' && current && !session.current) {
       session.current = {
-        id: crypto.randomUUID(), videoId: current.videoId, channelId: current.channelId,
-        startedAt: new Date().toISOString(), real: 0, media: 0, rates: new Map(), seekEvents: [],
-        playingIntervals: [], intervalStartedAt: new Date().toISOString(),
-        pendingWatchSeconds: 0, lastPosition: app.player.position, duration: app.player.duration
+        id: crypto.randomUUID(),
+        videoId: current.videoId,
+        channelId: current.channelId,
+        startedAt: new Date().toISOString(),
+        real: 0,
+        media: 0,
+        rates: new Map(),
+        seekEvents: [],
+        playingIntervals: [],
+        intervalStartedAt: new Date().toISOString(),
+        pendingWatchSeconds: 0,
+        lastPosition: app.player.position,
+        duration: app.player.duration,
       }
     } else if (app.player.state === 'playing' && session.current && !session.current.intervalStartedAt) {
       session.current.intervalStartedAt = new Date().toISOString()
@@ -114,16 +126,17 @@ export function PersistentPlayer() {
       const active = session.current
       if (currentApp.player.state !== 'playing' || !video || !active || active.videoId !== video.videoId) return
 
-      const expectedPosition = active.lastPosition + delta * currentApp.player.rate
+      const rate = currentApp.player.actualRate
+      const expectedPosition = active.lastPosition + delta * rate
       if (Math.abs(currentApp.player.position - expectedPosition) > 3 && active.seekEvents.length < 200) {
         active.seekEvents.push({ from: active.lastPosition, to: currentApp.player.position, at: new Date().toISOString() })
       }
       active.real += delta
-      active.media += delta * currentApp.player.rate
+      active.media += delta * rate
       active.pendingWatchSeconds += delta
       active.lastPosition = currentApp.player.position
       active.duration = currentApp.player.duration
-      active.rates.set(currentApp.player.rate, (active.rates.get(currentApp.player.rate) ?? 0) + delta)
+      active.rates.set(rate, (active.rates.get(rate) ?? 0) + delta)
       if (active.pendingWatchSeconds >= 5) flushProgress()
       if (pointA !== undefined && pointB !== undefined && currentApp.player.position >= pointB) performSeek(pointA, false)
     }, 1000)
@@ -135,8 +148,10 @@ export function PersistentPlayer() {
     app.recordProgress(current.videoId, app.player.duration, app.player.duration)
     const channelAutoplay = app.state.channelPreferences.find((item) => item.channelId === current.channelId)?.queueAutoplay
     const action = resolvePlaybackEndAction(repeat, app.state.queue.length, channelAutoplay ?? app.state.settings.playback.continuousPlay)
-    if (action === 'repeat') { performSeek(0, false); playerEngine.play() }
-    else if (action === 'next') {
+    if (action === 'repeat') {
+      performSeek(0, false)
+      playbackOrchestrator.play()
+    } else if (action === 'next') {
       const nextVideoId = app.state.queue[0]?.video.videoId
       app.playNext()
       if (full && nextVideoId) navigate(`/watch?v=${nextVideoId}`, { replace: true })
@@ -153,7 +168,11 @@ export function PersistentPlayer() {
     const finish = () => { save(); finishSession() }
     document.addEventListener('visibilitychange', save)
     window.addEventListener('pagehide', finish)
-    return () => { document.removeEventListener('visibilitychange', save); window.removeEventListener('pagehide', finish); save() }
+    return () => {
+      document.removeEventListener('visibilitychange', save)
+      window.removeEventListener('pagehide', finish)
+      save()
+    }
   }, [])
 
   useEffect(() => {
@@ -190,8 +209,23 @@ export function PersistentPlayer() {
     updateSessionSnapshot()
     flushProgress()
     const value = session.current
-    if (!value || value.real < 0.25) { session.current = undefined; return }
-    latest.current.app.recordSession({ sessionId: value.id, videoId: value.videoId, channelId: value.channelId, startedAt: value.startedAt, endedAt: new Date().toISOString(), watchedMediaSeconds: value.media, realElapsedSeconds: value.real, playbackRates: [...value.rates].map(([rate, realSeconds]) => ({ rate, realSeconds })), seekEvents: value.seekEvents, playingIntervals: value.playingIntervals, completionRate: value.duration ? Math.min(1, value.lastPosition / value.duration) : 0 })
+    if (!value || value.real < 0.25) {
+      session.current = undefined
+      return
+    }
+    latest.current.app.recordSession({
+      sessionId: value.id,
+      videoId: value.videoId,
+      channelId: value.channelId,
+      startedAt: value.startedAt,
+      endedAt: new Date().toISOString(),
+      watchedMediaSeconds: value.media,
+      realElapsedSeconds: value.real,
+      playbackRates: [...value.rates].map(([rate, realSeconds]) => ({ rate, realSeconds })),
+      seekEvents: value.seekEvents,
+      playingIntervals: value.playingIntervals,
+      completionRate: value.duration ? Math.min(1, value.lastPosition / value.duration) : 0,
+    })
     session.current = undefined
   }
 
@@ -203,10 +237,14 @@ export function PersistentPlayer() {
       if (record && Math.abs(actualTarget - snapshot.position) >= 0.5 && active.seekEvents.length < 200) active.seekEvents.push({ from: snapshot.position, to: actualTarget, at: new Date().toISOString() })
       active.lastPosition = actualTarget
     }
-    playerEngine.seekTo(actualTarget)
+    playbackOrchestrator.seekTo(actualTarget)
   }
 
-  function seek(delta: number) { performSeek(app.player.position + delta); app.notify(`${delta > 0 ? '+' : ''}${delta}秒`) }
+  function seek(delta: number) {
+    performSeek(app.player.position + delta)
+    app.notify(`${delta > 0 ? '+' : ''}${delta}秒`)
+  }
+
   async function togglePlayerFullscreen() {
     try {
       const result = await toggleFullscreen(frameRef.current)
@@ -216,35 +254,60 @@ export function PersistentPlayer() {
       app.notify('Fullscreenへ切り替えられませんでした', 'error')
     }
   }
-  function setPointB() { if (a === undefined || app.player.position <= a || app.player.position - a < 2) { app.notify('BはAより2秒以上後に設定してください', 'error'); return } setB(app.player.position) }
+
+  function setPointB() {
+    if (a === undefined || app.player.position <= a || app.player.position - a < 2) {
+      app.notify('BはAより2秒以上後に設定してください', 'error')
+      return
+    }
+    setB(app.player.position)
+  }
+
   function beginBoost() {
-    if (boostRate.current !== undefined) return
-    boostRate.current = latest.current.app.player.rate
-    playerEngine.setRate(nextPlaybackRate(latest.current.app.player.rate, latest.current.app.player.availableRates, latest.current.app.state.settings.playback.boostMode))
+    if (boostActualRate.current !== undefined) return
+    boostActualRate.current = latest.current.app.player.actualRate
+    const target = nextSupportedRate(
+      latest.current.app.player.actualRate,
+      latest.current.app.player.supportedRates,
+      latest.current.app.state.settings.playback.boostMode,
+    )
+    playbackOrchestrator.setTemporaryRate(target)
     setBoosting(true)
   }
+
   function endBoost() {
-    if (boostRate.current !== undefined) playerEngine.setRate(boostRate.current)
-    boostRate.current = undefined
+    if (boostActualRate.current !== undefined) playbackOrchestrator.clearTemporaryRate(boostActualRate.current)
+    boostActualRate.current = undefined
     setBoosting(false)
   }
+
   function boostPointerStart(event: ReactPointerEvent<HTMLButtonElement>) {
     if (!event.isPrimary || event.button !== 0) return
     event.currentTarget.setPointerCapture(event.pointerId)
     beginBoost()
   }
+
   function boostPointerEnd(event: ReactPointerEvent<HTMLButtonElement>) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
     endBoost()
   }
+
   function boostKeyStart(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) { event.preventDefault(); beginBoost() }
+    if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) {
+      event.preventDefault()
+      beginBoost()
+    }
   }
+
   function boostKeyEnd(event: ReactKeyboardEvent<HTMLButtonElement>) {
-    if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); endBoost() }
+    if (event.key === ' ' || event.key === 'Enter') {
+      event.preventDefault()
+      endBoost()
+    }
   }
 
   if (!current) return null
+
   return <section className={`persistent-player ${full ? 'player-full' : 'player-mini'}`} aria-label="動画プレイヤー">
     <div className="player-frame" ref={frameRef}>
       <div className="youtube-host" ref={hostRef} />
@@ -259,21 +322,20 @@ export function PersistentPlayer() {
       </div>
       <div className="controls-row">
         <button className="icon-button" onClick={() => seek(-app.state.settings.playback.seekSeconds)} aria-label={`${app.state.settings.playback.seekSeconds}秒戻る`}><RotateCcw /></button>
-        <button className="play-button" onClick={() => playerEngine.toggle()} aria-label={app.player.state === 'playing' ? '一時停止' : '再生'}>{app.player.state === 'playing' ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}</button>
+        <button className="play-button" onClick={() => playbackOrchestrator.toggle()} aria-label={app.player.state === 'playing' ? '一時停止' : '再生'}>{app.player.state === 'playing' ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}</button>
         <button className="icon-button" onClick={() => seek(app.state.settings.playback.seekSeconds)} aria-label={`${app.state.settings.playback.seekSeconds}秒進む`}><RotateCw /></button>
         {full && <>
           <button className={`control-chip ${repeat ? 'active' : ''}`} onClick={() => setRepeat((value) => !value)}><Repeat />Repeat</button>
           {app.feature('abRepeat') && <div className="ab-controls"><button className={a !== undefined ? 'active' : ''} onClick={() => { setA(app.player.position); if (b !== undefined && b <= app.player.position + 2) setB(undefined) }}>A</button><button className={b !== undefined ? 'active' : ''} onClick={setPointB}>B</button>{a !== undefined && <button onClick={() => { setA(undefined); setB(undefined) }}>Clear</button>}</div>}
-          <select className="rate-select" value={app.player.rate} onChange={(event) => playerEngine.setRate(Number(event.target.value))} aria-label="再生速度">{app.player.availableRates.map((rate) => <option key={rate} value={rate}>{rate}x</option>)}</select>
           {app.feature('temporaryBoost') && <button className={`boost-button ${boosting ? 'is-boosting' : ''}`} aria-pressed={boosting} onPointerDown={boostPointerStart} onPointerUp={boostPointerEnd} onPointerCancel={boostPointerEnd} onLostPointerCapture={endBoost} onKeyDown={boostKeyStart} onKeyUp={boostKeyEnd} onBlur={endBoost}><Gauge />BOOST</button>}
         </>}
         <span className="control-spacer" />
-        <button className="icon-button" onClick={() => playerEngine.toggleMute()} aria-label="ミュート切替">{app.player.muted ? <VolumeX /> : <Volume2 />}</button>
-        {full && <label className="volume-control"><span className="sr-only">音量</span><input type="range" min="0" max="100" step="1" value={app.player.volume} onChange={(event) => playerEngine.setVolume(Number(event.target.value))} aria-label="音量" /><span>{Math.round(app.player.volume)}%</span></label>}
+        <button className="icon-button" onClick={() => playbackOrchestrator.toggleMute()} aria-label="ミュート切替">{app.player.muted ? <VolumeX /> : <Volume2 />}</button>
+        {full && <label className="volume-control"><span className="sr-only">音量</span><input type="range" min="0" max="100" step="1" value={app.player.volume} onChange={(event) => playbackOrchestrator.setVolume(Number(event.target.value))} aria-label="音量" /><span>{Math.round(app.player.volume)}%</span></label>}
         {full ? <button className={`icon-button ${fullscreen ? 'active' : ''}`} onClick={() => void togglePlayerFullscreen()} aria-label={fullscreen ? '全画面を終了' : '全画面'}>{fullscreen ? <Minimize2 /> : <Maximize2 />}</button> : <button className="icon-button" onClick={() => navigate(`/watch?v=${current.videoId}`)} aria-label="展開"><ChevronUp /></button>}
         <button className="icon-button danger-hover" onClick={() => { finishSession(); app.closePlayer() }} aria-label="プレイヤーを閉じる"><X /></button>
       </div>
-      {full && <div className="speed-preset-strip" role="group" aria-label="再生速度プリセット">{app.state.settings.playback.speedPresets.map((rate) => <button type="button" className={app.player.rate === rate ? 'active' : ''} aria-pressed={app.player.rate === rate} disabled={!app.player.availableRates.includes(rate)} onClick={() => playerEngine.setRate(rate)} key={rate}>{rate}x</button>)}</div>}
+      {full && <PlaybackRateControl player={app.player} presets={app.state.settings.playback.speedPresets} onRate={(rate) => playbackOrchestrator.setDesiredRate(rate)} />}
     </div>
   </section>
 }
