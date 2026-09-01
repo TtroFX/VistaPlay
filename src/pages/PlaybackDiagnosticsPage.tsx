@@ -56,8 +56,9 @@ export default function PlaybackDiagnosticsPage() {
     try {
       const media = await resolveYoutubeMedia(id)
       const selected = selectInitialStream(media.streams)
+      const quality = selected.qualityLabel ?? (selected.height ? `${selected.height}p` : 'unknown')
       setResolver(`${media.resolver.type} · ${hostOf(media.resolver.instance)}`)
-      setStream(`${selected.qualityLabel ?? selected.height ? `${selected.height ?? '?'}p` : 'unknown'} · ${selected.container ?? selected.mimeType ?? 'unknown'} · ${selected.proxied ? 'proxied' : 'direct'} · ${hostOf(selected.url)}`)
+      setStream(`${quality} · ${selected.container ?? selected.mimeType ?? 'unknown'} · ${selected.proxied ? 'proxied' : 'direct'} · ${hostOf(selected.url)}`)
 
       const backend = new HTMLMediaBackend()
       backendRef.current = backend
@@ -85,6 +86,8 @@ export default function PlaybackDiagnosticsPage() {
     if (backendRef.current) setSnapshot({ ...backendRef.current.snapshot })
   }
 
+  const canControl = phase === 'mounted'
+
   return <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px clamp(18px, 4vw, 44px) 100px' }}>
     <header style={{ marginBottom: 20 }}>
       <span className="section-kicker">PLAYBACK DIAGNOSTICS</span>
@@ -105,7 +108,7 @@ export default function PlaybackDiagnosticsPage() {
       <div className="controls-row" style={{ marginTop: 12 }}>
         <button className="control-chip" type="button" onClick={() => backendRef.current?.play()} disabled={!snapshot.ready}>Play</button>
         <button className="control-chip" type="button" onClick={() => backendRef.current?.pause()} disabled={!snapshot.ready}>Pause</button>
-        {[1, 2, 3, 4].map((rate) => <button className={`control-chip ${Math.abs(snapshot.actualRate - rate) < .001 ? 'active' : ''}`} type="button" onClick={() => setRate(rate)} disabled={!backendRef.current} key={rate}>{rate}x</button>)}
+        {[1, 2, 3, 4].map((rate) => <button className={`control-chip ${Math.abs(snapshot.actualRate - rate) < .001 ? 'active' : ''}`} type="button" onClick={() => setRate(rate)} disabled={!canControl} key={rate}>{rate}x</button>)}
       </div>
     </section>
 
