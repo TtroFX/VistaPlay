@@ -1,6 +1,7 @@
 const endpoint = process.env.WEBVIEW_CDP_ENDPOINT ?? 'http://127.0.0.1:9222'
 const appOrigin = 'https://ttrofx.github.io/VistaPlay'
 const candidateVideoIds = ['M7lc1UVf-VE', 'jNQXAC9IVRw']
+const diagnosticsHeading = '新再生経路の実動作確認'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -101,6 +102,43 @@ async function getPageTarget() {
   return page
 }
 
+async function navigateUntilDiagnosticsReady(cdp) {
+  const deadline = Date.now() + 100_000
+  let attempt = 0
+  let lastState = null
+
+  while (Date.now() < deadline) {
+    attempt += 1
+    const url = `${appOrigin}/diagnostics/playback?runtimeProbe=${Date.now()}`
+    let navigation = null
+    try {
+      navigation = await cdp.send('Page.navigate', { url }, 15_000)
+    } catch (error) {
+      navigation = { commandError: error instanceof Error ? error.message : String(error) }
+    }
+
+    await sleep(4_000)
+
+    try {
+      lastState = await cdp.evaluate(`(() => ({
+        ready: document.readyState !== 'loading' && [...document.querySelectorAll('h1')].some((item) => item.textContent?.trim() === ${JSON.stringify(diagnosticsHeading)}),
+        documentReadyState: document.readyState,
+        title: document.title,
+        href: location.href,
+        body: document.body?.innerText?.slice(0, 220) ?? '',
+      }))()`)
+    } catch (error) {
+      lastState = { evaluationError: error instanceof Error ? error.message : String(error) }
+    }
+
+    console.log(`navigation attempt ${attempt}: ${JSON.stringify({ navigation, state: lastState })}`)
+    if (lastState?.ready) return
+    await sleep(2_000)
+  }
+
+  throw new Error(`VistaPlay diagnostics did not load after repeated WebView navigation attempts: ${JSON.stringify(lastState)}`)
+}
+
 async function clickByText(cdp, text) {
   const clicked = await cdp.evaluate(`(() => {
     const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.trim() === ${JSON.stringify(text)})
@@ -142,8 +180,7 @@ async function main() {
   await cdp.connect()
 
   try {
-    await cdp.send('Page.navigate', { url: `${appOrigin}/diagnostics/playback` })
-    await cdp.waitFor(`document.readyState !== 'loading' && [...document.querySelectorAll('h1')].some((item) => item.textContent?.trim() === '新再生経路の実動作確認')`, 45_000)
+    await navigateUntilDiagnosticsReady(cdp)
 
     const nativeBridge = await cdp.evaluate(`(() => ({
       exists: Boolean(window.VistaPlayNative),
