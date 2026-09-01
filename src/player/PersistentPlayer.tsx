@@ -18,12 +18,15 @@ export function PersistentPlayer() {
   const hostRef = useRef<HTMLDivElement>(null)
   const frameRef = useRef<HTMLDivElement>(null)
   const latestPlayback = useRef({ player: app.player, recordProgress: app.recordProgress })
-  latestPlayback.current = { player: app.player, recordProgress: app.recordProgress }
   const [resolverState, setResolverState] = useState<'idle' | 'resolving' | 'ready' | 'error'>('idle')
   const [resolverError, setResolverError] = useState('')
   const [sourceLabel, setSourceLabel] = useState('')
   const current = app.currentVideo
   const full = location.pathname === '/watch'
+
+  useEffect(() => {
+    latestPlayback.current = { player: app.player, recordProgress: app.recordProgress }
+  }, [app.player, app.recordProgress])
 
   const preferredRate = useMemo(() => {
     const raw = current
