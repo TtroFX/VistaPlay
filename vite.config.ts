@@ -12,9 +12,11 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       includeAssets: [
-        'vistaplay-icon-192-v2.png',
-        'vistaplay-icon-512-v2.png',
-        'vistaplay-maskable-512-v2.png'
+        'vistaplay-icon-192-v3.png',
+        'vistaplay-icon-v3.svg',
+        'vistaplay-maskable-v3.svg',
+        'vistaplay-apple-touch-icon-v3.png',
+        'vistaplay-icon-512-v2.png'
       ],
       manifest: {
         name: 'VistaPlay',
@@ -27,9 +29,10 @@ export default defineConfig({
         start_url: base,
         scope: base,
         icons: [
-          { src: appPath('vistaplay-icon-192-v2.png'), sizes: '192x192', type: 'image/png' },
-          { src: appPath('vistaplay-icon-512-v2.png'), sizes: '512x512', type: 'image/png' },
-          { src: appPath('vistaplay-maskable-512-v2.png'), sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+          { src: appPath('vistaplay-icon-192-v3.png'), sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: appPath('vistaplay-icon-v3.svg'), sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: appPath('vistaplay-icon-512-v2.png'), sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: appPath('vistaplay-maskable-v3.svg'), sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' }
         ],
         shortcuts: [
           { name: 'Search', short_name: 'Search', url: appPath('search') },
