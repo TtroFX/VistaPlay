@@ -1,0 +1,61 @@
+name: Android WebView runtime probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'src/player/**'
+      - 'src/pages/PlaybackDiagnosticsPage.tsx'
+      - 'e2e/android-webview-live.mjs'
+      - 'e2e/run-android-webview-runtime.sh'
+      - '.github/workflows/android-runtime.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-webview-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK 37
+        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+      - run: npm ci
+      - name: Install CDP client
+        run: npm install --no-save --package-lock=false playwright-core@1.55.0
+      - name: Assemble Android debug app
+        run: gradle -p android :app:assembleDebug --stacktrace
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify native resolver and 4x in Android WebView
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          emulator-boot-timeout: 600
+          script: e2e/run-android-webview-runtime.sh
