@@ -1,5 +1,5 @@
 import { Suspense, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
-import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LoadingCards } from './components/EmptyState'
 import { NativeControlLayer } from './components/NativeControlLayer'
 import { Sidebar } from './components/Sidebar'
@@ -12,11 +12,10 @@ import { useApp } from './store/AppStore'
 export function AppShell() {
   const app = useApp()
   const location = useLocation()
-  const navigationType = useNavigationType()
   const navigate = useNavigate()
   const swipeBack = useCallback(() => navigate(-1), [navigate])
   const swipeRef = useEdgeSwipeBack(swipeBack)
-  const previousPathname = useRef(location.pathname)
+  const previousLocation = useRef(`${location.pathname}${location.search}${location.hash}`)
 
   useEffect(() => {
     const previous = window.history.scrollRestoration
@@ -25,15 +24,16 @@ export function AppShell() {
   }, [])
 
   useLayoutEffect(() => {
-    const previous = previousPathname.current
-    previousPathname.current = location.pathname
-    if (previous === location.pathname || navigationType === 'POP') return
+    const current = `${location.pathname}${location.search}${location.hash}`
+    const previous = previousLocation.current
+    previousLocation.current = current
+    if (previous === current) return
     const root = document.documentElement
     const priorBehavior = root.style.scrollBehavior
     root.style.scrollBehavior = 'auto'
     window.scrollTo(0, 0)
     root.style.scrollBehavior = priorBehavior
-  }, [location.pathname, navigationType])
+  }, [location.pathname, location.search, location.hash])
 
   useEffect(() => {
     const mode = app.state.settings.theme.mode
